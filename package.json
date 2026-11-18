@@ -1,0 +1,50 @@
+{
+  "name": "clawstly-oc-rpc",
+  "version": "0.1.0",
+  "description": "Discord Rich Presence for OpenCode — a local OpenCode V2 plugin and daemon forked from rar-file/claude-rpc.",
+  "type": "module",
+  "license": "MIT",
+  "author": "sdkitagawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rar-file/claude-rpc.git"
+  },
+  "bin": {
+    "clawstly-oc-rpc": "./bin/clawstly-oc-rpc.js"
+  },
+  "scripts": {
+    "start": "node ./src/daemon.js",
+    "setup": "node ./bin/clawstly-oc-rpc.js setup",
+    "status": "node ./bin/clawstly-oc-rpc.js status",
+    "stop": "node ./bin/clawstly-oc-rpc.js stop",
+    "doctor": "node ./bin/clawstly-oc-rpc.js doctor",
+    "serve": "node ./bin/clawstly-oc-rpc.js serve",
+    "scan": "node ./bin/clawstly-oc-rpc.js scan",
+    "test": "node ./scripts/run-tests.mjs",
+    "check": "node ./scripts/check-syntax.mjs && node ./scripts/check-imports.mjs",
+    "check:syntax": "node ./scripts/check-syntax.mjs",
+    "check:imports": "node ./scripts/check-imports.mjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "^2.3.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "opencode",
+    "discord",
+    "discord-rpc",
+    "rich-presence",
+    "plugin"
+  ],
+  "files": [
+    "bin",
+    "plugin",
+    "src",
+    "config.example.json",
+    "opencode.example.jsonc",
+    "LICENSE",
+    "README.md"
+  ]
+}
