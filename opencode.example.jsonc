@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Copy the plugins block into ~/.config/opencode/opencode.jsonc
+  // and use an absolute path to the plugin DIRECTORY.
+  "plugins": [
+    "C:/absolute/path/to/clawstly_oc_rpc/plugin"
+  ]
+}
