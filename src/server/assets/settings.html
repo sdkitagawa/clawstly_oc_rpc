@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<title>Settings · Clawstly</title>
+<style>{{STYLES}}</style>
+</head>
+<body class="settings">
+<main class="page">
+  <header class="topbar">
+    <div class="brand">
+      <img class="mark" src="/favicon.ico" alt="" aria-hidden="true" />
+      <span>Settings</span>
+    </div>
+    <div class="top-right">
+      <a class="nav-link" href="/">← Stats</a>
+    </div>
+  </header>
+
+  <p class="set-error hidden" id="client-warning"></p>
+
+  <section class="set-card">
+    <div class="set-head"><h2>General</h2><span class="set-hint">stored in your local config</span></div>
+    <div class="grid2">
+      <label class="field wide">
+        <span>Discord application ID (client ID)</span>
+        <input type="text" data-config="clientId" placeholder="123456789012345678" spellcheck="false" />
+        <small>17–21 digits from the Discord developer portal.</small>
+      </label>
+      <label class="field">
+        <span>App name</span>
+        <input type="text" data-config="appName" placeholder="Clawstly" />
+      </label>
+      <label class="field">
+        <span>Displayed model (RPC only)</span>
+        <input id="display-model" type="text" data-config="displayModel" placeholder="Claude Opus" list="model-suggestions" spellcheck="false" />
+        <datalist id="model-suggestions"></datalist>
+        <small>What Discord sees. Blank uses the real model.</small>
+      </label>
+      <label class="field">
+        <span>Card metric</span>
+        <select data-config="displayMetric">
+          <option value="tokens">Tokens</option>
+          <option value="cost">Estimated cost</option>
+          <option value="both">Both</option>
+        </select>
+        <small>Cost is an estimate marked with ≈.</small>
+      </label>
+      <label class="field check">
+        <span>Autostart daemon</span>
+        <input type="checkbox" data-config="autostart" />
+      </label>
+      <label class="field">
+        <span>Update interval (ms)</span>
+        <input type="number" min="0" step="500" data-config="updateIntervalMs" />
+      </label>
+      <label class="field">
+        <span>Rotation interval (ms)</span>
+        <input type="number" min="0" step="500" data-config="rotationIntervalMs" />
+      </label>
+      <label class="field">
+        <span>Idle threshold (sec)</span>
+        <input type="number" min="0" step="1" data-config="idleThresholdSec" />
+      </label>
+    </div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Status templates</h2><span class="set-hint">{project} · {modelPretty} · {metricLabel}</span></div>
+    <div id="status-templates" class="status-templates"></div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Discord card art</h2><span class="set-hint">asset keys or public GIF URLs</span></div>
+    <div class="grid2" id="asset-fields">
+      <label class="field">
+        <span>Default large image</span>
+        <input type="text" data-config="presence.largeImageKey" placeholder="oc_idle" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Default small image</span>
+        <input type="text" data-config="presence.smallImageKey" placeholder="oc_working" spellcheck="false" />
+      </label>
+    </div>
+    <div class="grid2 asset-status-grid" id="asset-status-fields"></div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Template variables</h2><button class="btn" id="refresh-vars" type="button">Refresh</button></div>
+    <p class="set-hint">Click a variable to copy its name.</p>
+    <div class="var-chips" id="var-chips"></div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Workspace privacy</h2><button class="btn" id="refresh-workspaces" type="button">Refresh</button></div>
+    <p class="set-hint">Choose what OpenCode RPC may show for each workspace.</p>
+    <div class="workspace-list" id="workspace-list"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Daemon</h2><span class="pill" id="daemon-status">Checking…</span></div>
+    <div class="btn-row">
+      <button class="btn" data-daemon="start" type="button">Start</button>
+      <button class="btn" data-daemon="stop" type="button">Stop</button>
+      <button class="btn" data-daemon="restart" type="button">Restart</button>
+      <button class="btn" id="refresh-daemon" type="button">Refresh status</button>
+    </div>
+  </section>
+
+  <section class="set-card">
+    <div class="set-head"><h2>Log tail</h2><button class="btn" id="refresh-log" type="button">Refresh</button></div>
+    <div class="log"><pre id="log-content">Loading…</pre></div>
+  </section>
+
+  <footer>
+    <span>Localhost only · port {{PORT}}</span>
+    <a class="nav-link" href="/">Back to dashboard</a>
+  </footer>
+</main>
+<div class="savebar" id="savebar">
+  <span class="save-msg">Changes save to this machine only.</span>
+  <button class="btn primary" id="save-settings" type="button">Save settings</button>
+</div>
+<div class="toast hidden" id="toast" role="status"></div>
+<script>{{SCRIPT}}</script>
+</body>
+</html>
