@@ -1,0 +1,351 @@
+// Privacy mode — controls what the Discord card shows about a given cwd.
+// Three layers, highest-priority first:
+//
+//   1. Per-project ./.clawstly-oc-rpc.json file in the project root.
+//      { "visibility": "hidden|name-only|public", "projectName": "alias" }
+//      Shortcut: { "private": true } == { "visibility": "hidden" }
+//   2. Runtime list at ~/.clawstly-oc-rpc/private-list.json, toggled by
+//      `clawstly-oc-rpc private` / `clawstly-oc-rpc public`.
+//   3. Auto-detection of GitHub private repos via the `gh` CLI when
+//      installed. Best-effort, silently skips when gh isn't available
+//      or auth isn't set up. Cached per-cwd with 5min TTL.
+//
+// "Visibility" levels:
+//   public      everything as-is (default)
+//   name-only   project name kept, but currentFile / currentTool / files
+//               arrays cleared so the card doesn't leak paths
+//   hidden      cwd cleared entirely; daemon then short-circuits to
+//               clearActivity (same effect as hideWhenStale)
+//
+// Aggregates (scanner) and the local TUI/web dashboards are NEVER affected
+// by these flags. Privacy is a one-way valve from local state → Discord.
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { join, basename, dirname, resolve as resolvePath } from 'node:path';
+import { DATA_DIR } from './paths.js';
+
+// CLAWSTLY_OC_RPC_PRIVATE_LIST lets tests point the runtime store at a temp file
+// instead of the user's real ~/.clawstly-oc-rpc/private-list.json. Unset in normal
+// operation.
+const PRIVATE_LIST_PATH = process.env.CLAWSTLY_OC_RPC_PRIVATE_LIST || join(DATA_DIR, 'private-list.json');
+const TTL_MS = 5 * 60 * 1000;
+
+const projectFileCache = new Map();   // cwd → { ts, value | null }
+const ghPrivateCache  = new Map();    // cwd → { ts, value: bool | null }
+const ghProbeInFlight = new Set();    // cwds with an async `gh` probe running
+
+// ── Per-project .clawstly-oc-rpc.json ────────────────────────────────────────
+
+// Walk up from `cwd` looking for a .clawstly-oc-rpc.json. Stops at the first
+// match or at a .git directory (the project root). Lets a subdirectory
+// inherit the parent's privacy config.
+function findProjectFile(cwd) {
+  if (!cwd) return null;
+  let dir = cwd;
+  while (true) {
+    const candidate = join(dir, '.clawstly-oc-rpc.json');
+    if (existsSync(candidate)) return candidate;
+    if (existsSync(join(dir, '.git'))) return null;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function readProjectConfig(cwd) {
+  if (!cwd) return null;
+  const cached = projectFileCache.get(cwd);
+  if (cached && Date.now() - cached.ts < TTL_MS) return cached.value;
+  let value = null;
+  const path = findProjectFile(cwd);
+  if (path) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      if (parsed && typeof parsed === 'object') value = parsed;
+    } catch { /* broken JSON ≡ no override */ }
+  }
+  projectFileCache.set(cwd, { ts: Date.now(), value });
+  return value;
+}
+
+function normalizeProjectConfig(cfg) {
+  if (!cfg) return null;
+  let visibility = cfg.visibility;
+  if (cfg.private === true && !visibility) visibility = 'hidden';
+  if (!['public', 'name-only', 'hidden'].includes(visibility)) visibility = null;
+  return {
+    visibility,
+    projectName: typeof cfg.projectName === 'string' ? cfg.projectName : null,
+  };
+}
+
+// ── Runtime private-list ────────────────────────────────────────────────
+
+function readPrivateList() {
+  if (!existsSync(PRIVATE_LIST_PATH)) return { paths: [] };
+  try {
+    const v = JSON.parse(readFileSync(PRIVATE_LIST_PATH, 'utf8'));
+    if (v && typeof v === 'object') {
+      // `paths` is the legacy binary list (presence ≡ hidden). `visibility`
+      // is the richer GUI-managed map: { "<abs cwd>": "hidden|name-only|public" }.
+      return {
+        paths: Array.isArray(v.paths) ? v.paths : [],
+        visibility: (v.visibility && typeof v.visibility === 'object') ? v.visibility : undefined,
+      };
+    }
+  } catch { /* broken JSON ≡ no list (treat as empty rather than crash) */ }
+  return { paths: [] };
+}
+
+function writePrivateList(list) {
+  // The list's own dir (not DATA_DIR), so a CLAWSTLY_OC_RPC_PRIVATE_LIST override
+  // doesn't also create ~/.clawstly-oc-rpc.
+  mkdirSync(dirname(PRIVATE_LIST_PATH), { recursive: true });
+  writeFileSync(PRIVATE_LIST_PATH, JSON.stringify(list, null, 2));
+}
+
+// `clawstly-oc-rpc private`. The GUI-managed visibility map below outranks this
+// list, so a map entry for the cwd (or a parent) saying public / name-only
+// would make the command a silent no-op: pin the cwd hidden in the map too.
+export function addPrivateCwd(cwd) {
+  const abs = resolvePath(cwd);
+  const mapped = visibilityForCwd(abs);
+  if (mapped && mapped !== 'hidden') setCwdVisibility(abs, 'hidden');
+  const list = readPrivateList();
+  if (!list.paths.includes(abs)) {
+    list.paths.push(abs);
+    writePrivateList(list);
+  }
+  return list.paths;
+}
+
+// `clawstly-oc-rpc public`. Same precedence in reverse: drop the cwd's own hiding
+// map entry, and if a parent's entry would still hide it, mark it public.
+// An explicit 'public' entry is kept — it also opts out of pattern/gh hiding.
+export function removePrivateCwd(cwd) {
+  const abs = resolvePath(cwd);
+  const own = listVisibility()[abs];
+  if (own && own !== 'public') setCwdVisibility(abs, null);
+  const inherited = visibilityForCwd(abs);
+  if (inherited && inherited !== 'public') setCwdVisibility(abs, 'public');
+  const list = readPrivateList();
+  list.paths = list.paths.filter((p) => p !== abs);
+  writePrivateList(list);
+  return list.paths;
+}
+
+export function listPrivateCwds() {
+  return readPrivateList().paths;
+}
+
+function isInPrivateList(cwd) {
+  if (!cwd) return false;
+  const abs = resolvePath(cwd);
+  return readPrivateList().paths.some(
+    (p) => abs === p || abs.startsWith(p + '/') || abs.startsWith(p + '\\')
+  );
+}
+
+// ── Central visibility map (GUI-managed) ────────────────────────────────
+// A richer alternative to the binary `paths` list: maps an absolute cwd to
+// an explicit visibility level. Highest-priority runtime layer — an explicit
+// 'public' here even overrides config-glob / gh auto-detect, because the user
+// deliberately marked it. Subdirectories inherit a marked parent.
+
+const VIS_LEVELS = ['public', 'name-only', 'hidden'];
+function normLevel(v) { return VIS_LEVELS.includes(v) ? v : null; }
+
+function visibilityForCwd(cwd) {
+  if (!cwd) return null;
+  const map = readPrivateList().visibility;
+  if (!map) return null;
+  const abs = resolvePath(cwd);
+  if (map[abs]) return normLevel(map[abs]);
+  for (const [p, v] of Object.entries(map)) {
+    if (abs === p || abs.startsWith(p + '/') || abs.startsWith(p + '\\')) return normLevel(v);
+  }
+  return null;
+}
+
+// Set (or clear) the explicit visibility for a cwd. `level` of null/'default'
+// removes the override so resolution falls back through the lower layers.
+// Returns the updated visibility map.
+export function setCwdVisibility(cwd, level) {
+  const abs = resolvePath(cwd);
+  const list = readPrivateList();
+  const map = (list.visibility && typeof list.visibility === 'object') ? list.visibility : {};
+  const norm = normLevel(level);
+  if (norm) map[abs] = norm;
+  else delete map[abs];
+  // A path managed by the map shouldn't also linger in the legacy binary
+  // list, where it would always read as hidden regardless of the map value.
+  list.paths = (list.paths || []).filter((p) => p !== abs);
+  list.visibility = map;
+  writePrivateList(list);
+  return map;
+}
+
+// Read the current explicit-visibility map (abs cwd → level).
+export function listVisibility() {
+  return readPrivateList().visibility || {};
+}
+
+// ── GitHub-private detection (best-effort, gh CLI) ──────────────────────
+
+export function detectGithubPrivate(cwd) {
+  if (!cwd) return null;
+  const cached = ghPrivateCache.get(cwd);
+  if (cached && Date.now() - cached.ts < TTL_MS) return cached.value;
+  // Cache miss: the single-threaded daemon render path must never block on a
+  // subprocess (a 1.5s gh call stalls ALL presence + file-watch updates). Fire
+  // a non-blocking probe and serve the last known value (null = unknown) this
+  // tick; the fresh verdict lands in the cache for the next one.
+  probeGithubPrivate(cwd);
+  return cached ? cached.value : null;
+}
+
+function probeGithubPrivate(cwd) {
+  if (ghProbeInFlight.has(cwd)) return; // one in-flight probe per cwd
+  ghProbeInFlight.add(cwd);
+  execFile(
+    'gh',
+    ['repo', 'view', '--json', 'isPrivate', '-q', '.isPrivate'],
+    // windowsHide: on Windows `gh` is a console app; without this the daemon —
+    // which runs with no console of its own — pops a visible terminal window for
+    // the life of the probe (~1s) every time this fires (a cwd cache-miss, i.e.
+    // entering a project, then once per 5-min TTL). That's the stray terminal
+    // flash users see "sometimes" while working. No-op off Windows.
+    { cwd, timeout: 1500, windowsHide: true },
+    (err, stdout) => {
+      ghProbeInFlight.delete(cwd);
+      let value = null;
+      if (!err) {
+        const out = String(stdout).trim();
+        if (out === 'true') value = true;
+        else if (out === 'false') value = false;
+      }
+      // gh missing / not auth'd / not a repo / timeout → value stays null (unknown).
+      ghPrivateCache.set(cwd, { ts: Date.now(), value });
+    }
+  );
+}
+
+// ── Resolution + application ────────────────────────────────────────────
+
+// Resolve effective visibility for a cwd.
+// Returns: { visibility, projectName, reason }
+export function resolveVisibility(cwd, config = {}) {
+  const proj = normalizeProjectConfig(readProjectConfig(cwd));
+  if (proj?.visibility) {
+    return { visibility: proj.visibility, projectName: proj.projectName, reason: '.clawstly-oc-rpc.json' };
+  }
+  // Central GUI-managed map (incl. explicit 'public' as an opt-out of
+  // auto-hide). Ranks above the legacy binary list and config/gh layers.
+  const mapped = visibilityForCwd(cwd);
+  if (mapped) {
+    return { visibility: mapped, projectName: proj?.projectName ?? null, reason: 'private-list (visibility)' };
+  }
+  if (isInPrivateList(cwd)) {
+    return { visibility: 'hidden', projectName: proj?.projectName ?? null, reason: 'private-list' };
+  }
+  const patterns = config?.privacy?.patterns || [];
+  if (patterns.length && cwd) {
+    const leaf = basename(cwd);
+    for (const p of patterns) {
+      if (matchesPattern(leaf, p)) {
+        const mode = config?.privacy?.mode || 'hidden';
+        return { visibility: mode, projectName: proj?.projectName ?? null, reason: `config pattern '${p}'` };
+      }
+    }
+  }
+  if (config?.privacy?.autoDetectGithubPrivate !== false) {
+    const isPrivate = detectGithubPrivate(cwd);
+    if (isPrivate === true) {
+      const mode = config?.privacy?.githubPrivateMode || 'hidden';
+      return { visibility: mode, projectName: proj?.projectName ?? null, reason: 'github private repo' };
+    }
+  }
+  return { visibility: 'public', projectName: proj?.projectName ?? null, reason: 'default' };
+}
+
+// Name-level privacy check for surfaces that only have a project NAME, not a
+// cwd (the wrapped publish payload). Weaker than resolveVisibility — without a
+// cwd it can't read .clawstly-oc-rpc.json or auto-detect gh-private — which is why
+// the wrapped publish ALSO shows the exact payload and asks before sending.
+// `clean` lets the caller pass scanner.cleanProjectName so list entries match
+// the cleaned names the aggregate uses (kept an argument to keep this module
+// import-light for the hook path).
+export function projectNameIsPrivate(name, config = {}, clean = (s) => s) {
+  if (!name) return true;
+  const n = String(name).toLowerCase();
+  const matches = (cwd) => {
+    const leaf = basename(cwd);
+    return leaf.toLowerCase() === n || String(clean(leaf)).toLowerCase() === n;
+  };
+  for (const cwd of listPrivateCwds()) if (matches(cwd)) return true;
+  for (const [cwd, level] of Object.entries(listVisibility())) {
+    if (level !== 'public' && matches(cwd)) return true;
+  }
+  for (const p of config?.privacy?.patterns || []) {
+    if (matchesPattern(n, p)) return true;
+  }
+  return false;
+}
+
+// Glob-lite. '*' matches any run; otherwise plain text. Case-insensitive on
+// both sides, for plain and glob patterns alike ("ClientX" ≡ "clientx").
+function matchesPattern(name, pattern) {
+  const p = String(pattern);
+  if (!p.includes('*')) return p.toLowerCase() === String(name).toLowerCase();
+  const re = new RegExp('^' + p.split('*').map(escapeRe).join('.*') + '$', 'i');
+  return re.test(name);
+}
+function escapeRe(s) { return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Apply privacy to a post-applyIdle state. Pure function — no IO.
+export function applyPrivacy(state, config = {}) {
+  if (!state || state.status === 'stale') return state;
+  const { visibility, projectName } = resolveVisibility(state.cwd || '', config);
+
+  if (visibility === 'public') {
+    if (projectName) {
+      return { ...state, cwd: joinCwdAlias(state.cwd, projectName), _privacy: { visibility, alias: true } };
+    }
+    return state;
+  }
+
+  if (visibility === 'name-only') {
+    return {
+      ...state,
+      cwd: projectName ? joinCwdAlias(state.cwd, projectName) : state.cwd,
+      currentTool: null,
+      currentFile: null,
+      filesEdited: [],
+      filesRead: [],
+      filesOpened: [],
+      _privacy: { visibility, alias: !!projectName },
+    };
+  }
+
+  // hidden
+  return {
+    ...state,
+    cwd: '',
+    currentTool: null,
+    currentFile: null,
+    filesEdited: [],
+    filesRead: [],
+    filesOpened: [],
+    _privacy: { visibility, alias: false },
+  };
+}
+
+function joinCwdAlias(cwd, alias) {
+  if (!cwd) return alias;
+  const sep = cwd.includes('\\') ? '\\' : '/';
+  const parts = cwd.split(/[\\/]/).filter(Boolean);
+  if (!parts.length) return alias;
+  parts[parts.length - 1] = alias;
+  return (cwd.startsWith('/') ? '/' : '') + parts.join(sep);
+}
