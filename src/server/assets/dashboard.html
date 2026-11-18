@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<title>Clawstly · Local dashboard</title>
+<style>{{STYLES}}</style>
+</head>
+<body class="dashboard">
+<main class="page">
+  <header class="topbar">
+    <div class="brand">
+      <img class="mark" src="/favicon.ico" alt="" aria-hidden="true" />
+      <span>Clawstly</span>
+      <small>local dashboard</small>
+    </div>
+    <div class="top-right">
+      <a class="nav-link" href="/">Stats</a>
+      <a class="nav-link" href="/settings">Settings</a>
+      <span class="model" id="model" title="Model shown on Discord">—</span>
+      <span class="status" id="daemon-pill">Daemon: checking…</span>
+      <button class="btn" id="btn-refresh" type="button">Refresh</button>
+      <button class="btn primary" id="btn-rescan" type="button">Rescan</button>
+    </div>
+  </header>
+
+  <section class="live-rail">
+    <div class="avatar" id="presence-avatar" aria-hidden="true">OC</div>
+    <div class="live-copy">
+      <div class="stamp">Live preview</div>
+      <div class="live-frame">
+        <div class="label-tag" id="presence-status">—</div>
+        <div class="frame-details" id="presence-details">Loading…</div>
+        <div class="frame-state" id="presence-state">—</div>
+      </div>
+    </div>
+    <div class="frame-side">
+      <div class="frame-num" id="presence-key">Large image: —</div>
+      <div class="frame-chips" id="presence-frames"></div>
+    </div>
+  </section>
+  <p class="hint" id="presence-note">Presence preview uses your saved templates.</p>
+
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Active time</div>
+      <div><span class="figure" id="hero-num">—</span><span class="unit" id="hero-unit">hours</span></div>
+      <div class="caption" id="hero-caption">All recorded OpenCode sessions.</div>
+    </div>
+    <div class="chart-block">
+      <div class="chart-head">
+        <span class="chart-title">Activity by day</span>
+        <span class="chart-side">Last 14 recorded days</span>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="day-chart" viewBox="0 0 600 180" preserveAspectRatio="none" role="img" aria-label="Daily active time"></svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="stat-row">
+    <div class="stat-card"><span class="label">Sessions</span><div class="value"><strong id="stat-sessions">—</strong></div><div class="meta">all time</div></div>
+    <div class="stat-card"><span class="label">Prompts</span><div class="value"><strong id="stat-prompts">—</strong></div><div class="meta">user messages</div></div>
+    <div class="stat-card"><span class="label">Tool calls</span><div class="value"><strong id="stat-tools">—</strong></div><div class="meta">all time</div></div>
+    <div class="stat-card"><span class="label">Tokens</span><div class="value"><strong id="stat-tokens">—</strong></div><div class="meta">including cache</div></div>
+    <div class="stat-card"><span class="label">Projects</span><div class="value"><strong id="stat-projects">—</strong></div><div class="meta">seen locally</div></div>
+    <div class="stat-card"><span class="label">Active</span><div class="value"><strong id="stat-active">—</strong></div><div class="meta">total time</div></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Live sessions</h2><span class="right" id="live-count">0</span></div>
+    <div class="lb">
+      <div class="lb-h"><span class="t">OpenCode</span><span class="s">project · status · model</span></div>
+      <div class="live-list" id="live-list"><p class="muted">Checking sessions…</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Activity by hour</h2><span class="right">all time</span></div>
+    <div class="card chart-card">
+      <div class="chart-wrap">
+        <svg class="chart" id="hour-chart" viewBox="0 0 600 180" preserveAspectRatio="none" role="img" aria-label="Active time by hour"></svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="lb-grid">
+    <div>
+      <div class="section-head"><h2>Top projects</h2><span class="right">by active time</span></div>
+      <div class="lb">
+        <div class="lb-h"><span class="t">Projects</span><span class="s">time</span></div>
+        <ul class="bar-list" id="top-projects"></ul>
+      </div>
+    </div>
+    <div>
+      <div class="section-head"><h2>Top tools</h2><span class="right">all time</span></div>
+      <div class="lb">
+        <div class="lb-h"><span class="t">Tools</span><span class="s">calls</span></div>
+        <ul class="bar-list" id="top-tools"></ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="pulse"><span class="pulse-dot"></span><span id="conn-state">Localhost only</span></span>
+    <span>127.0.0.1:{{PORT}}</span>
+    <a class="nav-link" href="/settings">Open settings</a>
+  </footer>
+</main>
+<div class="toast hidden" id="toast" role="status"></div>
+<script>{{SCRIPT}}</script>
+</body>
+</html>
