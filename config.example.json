@@ -1,0 +1,10 @@
+{
+  "_comment": "Override any key from src/default-config.js. Replace clientId with your Discord application ID. displayModel hides the real model from Discord; displayMetric is tokens, cost or both. statusAssets accepts asset keys or public direct GIF URLs.",
+  "clientId": "YOUR_DISCORD_CLIENT_ID",
+  "appName": "Clawstly",
+  "displayModel": "Claude Opus",
+  "displayMetric": "cost",
+  "community": { "enabled": false },
+  "usage": { "enabled": false },
+  "profile": { "enabled": false }
+}
