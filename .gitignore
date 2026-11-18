@@ -1,0 +1,43 @@
+@ -1,42 +1,4 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dashboard/dist/
+# prep-dashboard.js stages the (~100MB) CLI binary here for electron-builder
+dashboard/resources/
+*.exe
+
+# Personal config (copy config.example.json → config.json and edit)
+config.json
+
+# Runtime state and logs
+*.log
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editor cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment overrides
+.env
+.env.local
+config.local.json
+
+# Local audit scratchpads (findings, not part of the repo)
+NOTES.md
+docs/AUDIT-*.md
+
+# launch board local creds + queue (never commit)
+tools/launch-board/.data/
+*.vsix
+
+# promotion / social kit drafts — kept local, never committed
+/promo/
+bot/state.json*
