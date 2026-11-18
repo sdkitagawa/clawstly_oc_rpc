@@ -1,0 +1,120 @@
+import { APP_NAME, modelLabelFor, normalizeMetric } from '../src/branding.js';
+import { DEFAULT_CONFIG } from '../src/default-config.js';
+import { buildVars, humanModel } from '../src/format.js';
+import { EVENTS, pluginSnippet } from '../src/install.js';
+import { pickActiveSession, resolveLargeImageKey, throttleDecision } from '../src/presence.js';
+import { dayKeyAt, weekKey, cleanProjectName, emptyAggregate } from '../src/scanner.js';
+import { validateConfig } from '../src/server/settings.js';
+import { statePathFor } from '../src/state.js';
+
+export async function run({ test, assert }) {
+  test('default config contains no upstream client ID or clawd assets', () => {
+    const json = JSON.stringify(DEFAULT_CONFIG);
+    assert(!json.includes('1506443909406920948'));
+    assert(!json.includes('clawd-'));
+    assert(!json.includes('claude-rpc.com'));
+    assert.equal(DEFAULT_CONFIG.clientId, 'YOUR_DISCORD_CLIENT_ID');
+    assert.equal(DEFAULT_CONFIG.appName, APP_NAME);
+    assert.equal(DEFAULT_CONFIG.community.enabled, false);
+    assert.equal(DEFAULT_CONFIG.usage.enabled, false);
+    assert.equal(DEFAULT_CONFIG.profile.enabled, false);
+  });
+
+  test('display identity defaults to Clawstly and estimated cost', () => {
+    assert.equal(APP_NAME, 'Clawstly');
+    assert.equal(DEFAULT_CONFIG.appName, APP_NAME);
+    assert.equal(DEFAULT_CONFIG.displayModel, 'Claude Opus');
+    assert.equal(DEFAULT_CONFIG.displayMetric, 'cost');
+    assert.match(DEFAULT_CONFIG.presence.largeImageText, /in \{appName\}/);
+    assert.equal(modelLabelFor('astra').label, 'GPT Astra');
+    assert.equal(modelLabelFor('opus').label, 'Claude Opus');
+    assert.equal(modelLabelFor('sonnet').label, 'Claude Sonnet');
+    assert.equal(modelLabelFor('haiku').label, 'Claude Haiku');
+    assert.equal(modelLabelFor('fable').label, 'Claude Fable');
+    assert.equal(modelLabelFor('real').cleared, true);
+    assert.equal(normalizeMetric('money'), 'cost');
+  });
+
+  test('display overrides rewrite card model and metric vars', () => {
+    const state = {
+      status: 'thinking',
+      model: 'anthropic/claude-sonnet-4-5',
+      tokens: { input: 1_000_000, output: 0, cacheRead: 0, cacheWrite: 0 },
+      sessionStart: Date.now(),
+    };
+    const base = { appName: APP_NAME, statusAssets: {}, presence: {} };
+    const costVars = buildVars(state, { ...base, displayModel: 'GPT Sol', displayMetric: 'cost' }, {});
+    assert.equal(costVars.modelPretty, 'GPT Sol');
+    assert.equal(costVars.model, 'GPT Sol');
+    assert.match(costVars.metricLabel, /^≈\$/);
+
+    const tokenVars = buildVars(state, { ...base, displayModel: '', displayMetric: 'tokens' }, {});
+    assert.equal(tokenVars.modelPretty, 'Sonnet 4.5');
+    assert.match(tokenVars.metricLabel, /tokens$/);
+  });
+
+  test('plugin snippet uses the V2 plugins array', () => {
+    const snippet = JSON.parse(pluginSnippet());
+    assert(Array.isArray(snippet.plugins));
+    assert.equal(snippet.plugins.length, 1);
+    assert.match(snippet.plugins[0], /[\\/]plugin$/);
+    assert(EVENTS.includes('session.created'));
+    assert(!EVENTS.includes('session.closed'));
+  });
+
+  test('status art accepts asset keys and remote GIF URLs', () => {
+    const gif = 'https://raw.githubusercontent.com/example/assets/main/oc_working.gif';
+    assert.equal(validateConfig({ clientId: 'YOUR_DISCORD_CLIENT_ID', statusAssets: { working: 'oc_working' } }), null);
+    assert.equal(validateConfig({ clientId: 'YOUR_DISCORD_CLIENT_ID', statusAssets: { working: gif } }), null);
+    assert.match(
+      validateConfig({ clientId: 'YOUR_DISCORD_CLIENT_ID', statusAssets: { working: 42 } }),
+      /asset key or URL/,
+    );
+    assert.equal(resolveLargeImageKey({ statusAssets: { working: gif } }, {}, 'working', null), gif);
+  });
+
+  test('humanModel handles OpenCode provider/model ids', () => {
+    assert.equal(humanModel('anthropic/claude-sonnet-4-5'), 'Sonnet 4.5');
+    assert.equal(humanModel('openai/gpt-5'), 'GPT 5');
+    assert.equal(humanModel(null), 'OpenCode');
+    assert.equal(humanModel('opencode'), 'OpenCode');
+  });
+
+  test('pickActiveSession ignores closed sessions', () => {
+    const now = 1_000_000;
+    const states = [
+      { sessionId: 'closed', lastActivity: now, opencodeClosed: true },
+      { sessionId: 'live', lastActivity: now - 1_000, cwd: '/repo', opencodeClosed: false },
+    ];
+    const picked = pickActiveSession(states, null, now, 60_000);
+    assert.equal(picked.sessionId, 'live');
+    assert.equal(picked.liveCount, 1);
+  });
+
+  test('throttleDecision honors a sliding window cap', () => {
+    const now = 100_000;
+    const d = throttleDecision({
+      hash: 'new', lastSentHash: 'old', lastSentAt: now - 1_000, now,
+      gapMs: 4_000, flushPending: false,
+      recentSends: [now - 1_000, now - 2_000, now - 3_000, now - 4_000],
+      windowMs: 20_000, maxPerWindow: 4,
+    });
+    assert.equal(d.action, 'defer');
+    assert(d.waitMs > 0);
+  });
+
+  test('scanner date helpers and aggregate shape', () => {
+    const now = new Date(2026, 0, 15, 12).getTime();
+    assert.equal(dayKeyAt(now, 1), '2026-01-14');
+    assert.match(weekKey(now), /^2026-W0[23]$/);
+    assert.equal(cleanProjectName('my-app-2026-04-25'), 'my-app');
+    const agg = emptyAggregate();
+    assert.equal(agg.sessions, 0);
+    assert.equal(agg.byDay && typeof agg.byDay, 'object');
+  });
+
+  test('state paths sanitize session IDs', () => {
+    const p = statePathFor('abc/def:123');
+    assert(/state-abcdef123\.json$/.test(p.replace(/\\/g, '/')));
+  });
+}
