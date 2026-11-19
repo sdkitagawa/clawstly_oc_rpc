@@ -239,6 +239,8 @@ The Discord card shows **Clawstly** as its app name. Two config keys control wha
 
 Use launcher menu options **7** and **8**, the `/settings` page, or the `model` and `metric` commands above. Changes restart the daemon so the card updates immediately.
 
+The dashboard keeps a timestamped record of the displayed model. Each session row shows the label that was active when that session was last active, so switching models does **not** relabel older rows; only new activity uses the new label. Selecting `real` is recorded too, and those rows fall back to the actual OpenCode model. The header badge and Discord card always show the current label.
+
 ## Local dashboard
 
 ```bash
