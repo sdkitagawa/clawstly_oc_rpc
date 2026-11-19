@@ -17,7 +17,7 @@ This fork does **not** include the upstream Claude Code hooks, transcript scanne
 2. Copy the **Application ID** (this is the OAuth2 Client ID used for Rich Presence).
 3. Choose card art:
    - **Static Discord art:** under **Rich Presence → Art Assets**, upload images and use their asset names. The defaults are `oc_working`, `oc_thinking`, `oc_compacting`, `oc_shipped`, `oc_idle`, and `oc_notification`.
-   - **Animated GIFs (upstream style):** host your own GIFs at public direct URLs — GitHub raw or GitHub Pages works — and set those URLs as `statusAssets` values in `config.json`. Discord fetches the GIF directly; the daemon does not download or proxy it. Use a direct file URL, not a GitHub blob page, and do not reuse upstream `clawd-*` assets.
+   - **Animated GIFs (upstream style):** host your own GIFs at public direct URLs - GitHub raw or GitHub Pages works - and set those URLs as `statusAssets` values in `config.json`. Discord fetches the GIF directly; the daemon does not download or proxy it. Use a direct file URL, not a GitHub blob page, and do not reuse upstream `clawd-*` assets.
 
    Example:
 
@@ -98,20 +98,20 @@ project folder in place. No build step is needed.
 With no arguments they open this menu (identical in all four launchers):
 
 ```text
- 1   Start all - Daemon / Dashboard Server.
- 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.
- 3   Restart all.
- 4   Restart RPC only.
- 5   Plugin source.
- 6   Open dashboard.
- 7   Status.
- 8   Health check.
- 9   Change displayed model.
-10   Token / Cost display.
-11   Start RPC only (Daemon).
-12   Stop RPC only (Daemon).
-13   Start Dashboard -> Browser.
-14   Exit.
+ 1 -  Start all - Daemon / Dashboard Server.
+ 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.
+ 3 -  Restart all.
+ 4 -  Restart RPC only.
+ 5 -  Plugin source.
+ 6 -  Open dashboard.
+ 7 -  Status.
+ 8 -  Health check.
+ 9 -  Change displayed model.
+10 -  Token / Cost display.
+11 -  Start RPC only (Daemon).
+12 -  Stop RPC only (Daemon).
+13 -  Start Dashboard -> Browser.
+14 -  Exit.
 ```
 
 What the start/stop options actually control:
@@ -121,7 +121,7 @@ What the start/stop options actually control:
   `http://127.0.0.1:47474`. The browser page and Node server are the same thing;
   there is no third component.
 - **1 Start all** starts the daemon **and** the dashboard server. It does **not**
-  open a browser — use option 13 for that.
+  open a browser - use option 13 for that.
 - **2 Stop all** clean-stops the daemon (writing the no-respawn marker), stops
   the dashboard server, then force-stops any leftover Node process whose command
   line still runs our daemon or server script. Other Node processes and OpenCode
@@ -163,7 +163,7 @@ Override the presets with `CLAWSTLY_PLUGIN_SOURCE` / `CLAWSTLY_PLUGIN_MIRROR`.
 
 ## Plugin registration / source selection
 
-OpenCode V2 loads plugins from its own `opencode.json(c)` — not from a command
+OpenCode V2 loads plugins from its own `opencode.json(c)` - not from a command
 hook. The plugin is a directory entry, and it must appear **exactly once**;
 registering both copies produces `Duplicate plugin ID: clawstly-oc-rpc` in
 `/plugins`.
@@ -234,8 +234,8 @@ node bin/clawstly-oc-rpc.js help [command]
 
 The Discord card shows **Clawstly** as its app name. Two config keys control what else is visible:
 
-- `displayModel` — the model name Discord sees. Defaults to `Claude Opus`. Choices: `GPT Sol`, `GPT Luna`, `GPT Astra`, `Claude Opus`, `Claude Sonnet`, `Claude Haiku`, `Claude Fable`, a custom label, or blank to use the real model. This never changes the model OpenCode actually runs.
-- `displayMetric` — `tokens`, `cost`, or `both`. Defaults to `cost`, rendered with `≈` because it is an estimate from local pricing data, not a bill.
+- `displayModel` - the model name Discord sees. Defaults to `Claude Opus`. Choices: `GPT Sol`, `GPT Luna`, `GPT Astra`, `Claude Opus`, `Claude Sonnet`, `Claude Haiku`, `Claude Fable`, a custom label, or blank to use the real model. This never changes the model OpenCode actually runs.
+- `displayMetric` - `tokens`, `cost`, or `both`. Defaults to `cost`, rendered with `≈` because it is an estimate from local pricing data, not a bill.
 
 Use launcher menu options **7** and **8**, the `/settings` page, or the `model` and `metric` commands above. Changes restart the daemon so the card updates immediately.
 
