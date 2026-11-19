@@ -51,6 +51,7 @@ export const STATE_DIR = join(tmpdir(), 'clawstly-oc-rpc');
 export const STATE_PATH = join(STATE_DIR, 'state.json');
 export const PID_PATH = join(STATE_DIR, 'daemon.pid');
 export const LOG_PATH = join(STATE_DIR, 'daemon.log');
+export const DASHBOARD_PID_PATH = join(STATE_DIR, 'dashboard.pid');
 export const DAEMON_INFO_PATH = join(STATE_DIR, 'daemon.json');
 export const PAUSE_PATH = join(STATE_DIR, 'pause.json');
 export const USAGE_CACHE_PATH = join(STATE_DIR, 'usage.json');
@@ -64,7 +65,8 @@ export const VERSION_STAMP = join(DATA_DIR, 'version');
 export const STOPPED_PATH = join(DATA_DIR, 'stopped');
 
 // OpenCode locations. V2 uses ~/.config/opencode on every platform (including
-// Windows); %APPDATA%\opencode is not read by current OpenCode releases.
+// Windows); %APPDATA%\opencode is a legacy fallback. See src/plugin-source.js
+// for the full cross-platform discovery used by `source` / the launchers.
 export const OPENCODE_HOME = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'opencode');
 export const OPENCODE_CONFIG_DIR = OPENCODE_HOME;
 export const OPENCODE_CONFIG_PATH = join(OPENCODE_CONFIG_DIR, 'opencode.jsonc');
