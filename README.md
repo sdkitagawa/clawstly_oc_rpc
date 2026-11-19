@@ -1,8 +1,6 @@
 # Clawstly OC RPC
 
-Discord Rich Presence for **OpenCode** into an OpenCode V2 plugin + local daemon.
-
-This fork does **not** include the upstream Claude Code hooks, transcript scanner, VS Code extension, Cloudflare worker, Discord bot, hosted website, community telemetry, leaderboard/profile publishing, or Anthropic usage polling. Community, usage, and profile integrations are hard-disabled by default.
+Clawstly Discord Rich Presence for **OpenCode** into an OpenCode V2 plugin with a local daemon.
 
 ## Requirements
 
@@ -10,33 +8,6 @@ This fork does **not** include the upstream Claude Code hooks, transcript scanne
 - OpenCode V2
 - Discord desktop client running and signed in (Rich Presence uses local Discord IPC)
 - Your own Discord application Client ID
-
-## Discord Developer Portal setup
-
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create an application.
-2. Copy the **Application ID** (this is the OAuth2 Client ID used for Rich Presence).
-3. Choose card art:
-   - **Static Discord art:** under **Rich Presence → Art Assets**, upload images and use their asset names. The defaults are `oc_working`, `oc_thinking`, `oc_compacting`, `oc_shipped`, `oc_idle`, and `oc_notification`.
-   - **Animated GIFs (upstream style):** host your own GIFs at public direct URLs - GitHub raw or GitHub Pages works - and set those URLs as `statusAssets` values in `config.json`. Discord fetches the GIF directly; the daemon does not download or proxy it. Use a direct file URL, not a GitHub blob page, and do not reuse upstream `clawd-*` assets.
-
-   Example:
-
-   ```json
-   {
-     "clientId": "1572562385951002674",
-     "statusAssets": {
-       "working": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_working.gif",
-       "thinking": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_thinking.gif",
-       "compacting": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_compacting.gif",
-       "shipped": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_shipped.gif",
-       "idle": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_idle.gif",
-       "notification": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_notification.gif"
-     }
-   }
-   ```
-4. Put the Application ID in `config.json` as `clientId`, or edit it later in the local dashboard at `http://127.0.0.1:47474/settings`.
-
-> The default value `YOUR_DISCORD_CLIENT_ID` is a placeholder. Presence will not appear in Discord until you replace it with your own application ID.
 
 ## Install
 
@@ -262,19 +233,46 @@ node bin/clawstly-oc-rpc.js serve
 
 Then open <http://127.0.0.1:47474>. The dashboard shows live OpenCode sessions, the current presence preview, aggregate stats, charts, and a `/settings` page for templates, asset keys or GIF URLs, model/metric display, privacy, and daemon controls. The server binds to loopback only and enforces same-origin checks on POST routes.
 
+## Discord Developer Portal setup
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create an application.
+2. Copy the **Application ID** (this is the OAuth2 Client ID used for Rich Presence).
+3. Choose card art:
+   - **Static Discord art:** under **Rich Presence → Art Assets**, upload images and use their asset names. The defaults are `oc_working`, `oc_thinking`, `oc_compacting`, `oc_shipped`, `oc_idle`, and `oc_notification`.
+   - **Animated GIFs (upstream style):** host your own GIFs at public direct URLs - GitHub raw or GitHub Pages works - and set those URLs as `statusAssets` values in `config.json`. Discord fetches the GIF directly; the daemon does not download or proxy it. Use a direct file URL, not a GitHub blob page, and do not reuse upstream `clawd-*` assets.
+
+   Example:
+
+   ```json
+   {
+     "clientId": "1572562385951002674",
+     "statusAssets": {
+       "working": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_working.gif",
+       "thinking": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_thinking.gif",
+       "compacting": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_compacting.gif",
+       "shipped": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_shipped.gif",
+       "idle": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_idle.gif",
+       "notification": "https://raw.githubusercontent.com/sdkitagawa/clawstly_oc_rpc/main/assets/status/clawstly_oc_notification.gif"
+     }
+   }
+   ```
+4. Put the Application ID in `config.json` as `clientId`, or edit it later in the local dashboard at `http://127.0.0.1:47474/settings`.
+
+> The default value `YOUR_DISCORD_CLIENT_ID` is a placeholder. Presence will not appear in Discord until you replace it with your own application ID.
+
 ## What the plugin maps
 
 The V2 plugin writes one state file per OpenCode session and maps:
 
-- `session.created` → session seed
-- `session.hook("prompt")` → early thinking status
-- `session.inbox.delivered` → prompt count, thinking status
-- `ctx.tool.hook("execute.before"/"execute.after")` → working status, tool/file counters, ship detection
-- `ctx.shell.hook("create.before")` → shell command activity
-- permission and form hooks/events → notification status
-- `session.hook("compaction")`, compaction events → compacting status
-- `session.usage.updated` → token and cost counters
-- `session.idle`, execution end, shutdown → idle/closed state
+- `session.created` → Session seed
+- `session.hook("prompt")` → Early thinking status
+- `session.inbox.delivered` → Prompt count, thinking status
+- `ctx.tool.hook("execute.before"/"execute.after")` → Working status, tool/file counters, ship detection
+- `ctx.shell.hook("create.before")` → Shell command activity
+- permission and form hooks/events → Notification status
+- `session.hook("compaction")`, Compaction events → compacting status
+- `session.usage.updated` → Token and cost counters
+- `session.idle`, Execution end, shutdown → idle/closed state
 
 See [`plugin/README.md`](plugin/README.md) for details.
 
@@ -282,7 +280,7 @@ See [`plugin/README.md`](plugin/README.md) for details.
 
 | Purpose | Location |
 | --- | --- |
-| User config | `config.json` in this repo (dev), or `%APPDATA%/clawstly-oc-rpc/config.json` when installed |
+| User config | Rename the `config.example.json` to `config.json` in this folder, then configure the settings manually or by using one of the [launchers](#easy-launcher) |
 | Live session state | OS temp dir: `clawstly-oc-rpc/state-<sessionId>.json` |
 | Aggregate stats | `~/.clawstly-oc-rpc/aggregate.json` |
 | Daemon log | OS temp dir: `clawstly-oc-rpc/daemon.log` |
