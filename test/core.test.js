@@ -11,7 +11,7 @@ import { validateConfig } from '../src/server/settings.js';
 import {
   isOurPluginEntry, pluginRegistrationIssues, readPluginsArray, replacePluginsArray, sourceStatus,
 } from '../src/plugin-source.js';
-import { classifyCommand } from '../src/process-control.js';
+import { classifyCommand, stopAll } from '../src/process-control.js';
 import {
   labelAt, normalizeEntries, readHistory, recordModelChange, seedHistory,
 } from '../src/display-model-history.js';
@@ -179,6 +179,35 @@ export async function run({ test, assert }) {
     assert.equal(classifyCommand('node "C:\\work\\bin\\clawstly-oc-rpc.js" serve'), 'dashboard');
     assert.equal(classifyCommand('node other-project.js'), null);
     assert.equal(classifyCommand('opencode.exe serve --service'), null);
+  });
+
+  const stopAllCalls = [];
+  let stopAllFinds = 0;
+  const stopAllResult = await stopAll({
+    mark: () => { stopAllCalls.push('plugin'); return true; },
+    stopDaemon: async (options) => {
+      stopAllCalls.push(`daemon:${options.mark}`);
+      return { stopped: true, killed: [] };
+    },
+    stopDashboard: async () => { stopAllCalls.push('dashboard'); return { stopped: true, killed: [] }; },
+    sweep: async (processes) => {
+      stopAllCalls.push('sweep');
+      return processes.map((proc) => proc.pid);
+    },
+    find: () => {
+      stopAllFinds += 1;
+      return stopAllFinds === 1 ? [{ pid: 42, kind: 'daemon' }] : [];
+    },
+    up: async () => { stopAllCalls.push('verify'); return false; },
+  });
+  test('stop all disables the plug-in first, then stops and verifies every component', () => {
+    assert.deepEqual(stopAllCalls, ['plugin', 'daemon:false', 'dashboard', 'sweep', 'verify']);
+    assert.deepEqual(stopAllResult.killed, [42]);
+    assert.equal(stopAllResult.plugin.disabled, true);
+    assert.equal(stopAllResult.stopped.daemon, true);
+    assert.equal(stopAllResult.stopped.dashboard, true);
+    assert.equal(stopAllResult.stopped.plugin, true);
+    assert.equal(stopAllResult.stopped.leftovers, true);
   });
 
   test('display model history resolves the label active at each point in time', () => {
