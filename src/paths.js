@@ -55,6 +55,7 @@ export const DASHBOARD_PID_PATH = join(STATE_DIR, 'dashboard.pid');
 export const DAEMON_INFO_PATH = join(STATE_DIR, 'daemon.json');
 export const PAUSE_PATH = join(STATE_DIR, 'pause.json');
 export const USAGE_CACHE_PATH = join(STATE_DIR, 'usage.json');
+export const MODEL_HISTORY_PATH = join(STATE_DIR, 'model-history.json');
 export const SPAWN_MARKER_PATH = join(STATE_DIR, 'daemon-spawn.ts');
 
 export const DATA_DIR = join(homedir(), '.clawstly-oc-rpc');
