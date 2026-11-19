@@ -1,21 +1,110 @@
 /* Clawstly local dashboard — paper/zine styling inspired by rar-file/claude-rpc.
-   No remote fonts or images: everything is local or CSS-generated. */
+   No remote fonts or images: everything is local or CSS-generated.
+   Light / dark palettes follow dogma_caveat_or_debunk. `data-theme` on <html>
+   overrides the OS preference; without it, prefers-color-scheme decides. */
 :root {
-  --paper: #f4ede0;
-  --paper-dark: #ebe2d2;
-  --ink: #1a1611;
-  --ink-soft: #2d2520;
-  --ink-mute: #5c5147;
-  --ink-faint: #8a7c6d;
-  --rust: #c2491e;
-  --tape: #f2d76e;
+  /* Reference palette — light */
+  --bg: #FCFCFB;
+  --side: #f5f4ed;
+  --card: #fff;
+  --ink: #141413;
+  --muted: #73726c;
+  --line: #e8e6dc;
+  --accent: #d97757;
+  --accent-ink: #fff;
+  --bubble: #f0eee6;
+  --field: #faf9f5;
+  --note: #f7efe3;
+  --bar: #ebe9df;
+  --panel: #fff;
+  --text-2: #52514e;
+  --muted-strong: #898781;
+  --check: #184f95;
+  --menu: #fff;
+  --strong: #0b0b0b;
+  --hover: rgba(11,11,11,.05);
+  --ring: rgba(11,11,11,.1);
+  --ring-strong: rgba(11,11,11,.2);
+  --divider: rgba(112,112,112,.05);
+
+  /* Dashboard aliases — same layout, reference colors */
+  --paper: var(--bg);
+  --paper-dark: var(--bubble);
+  --ink-soft: var(--text-2);
+  --ink-mute: var(--muted);
+  --ink-faint: var(--muted-strong);
+  --rust: var(--accent);
+  --tape: var(--note);
   --grass: #4a9462;
-  --purple: #5865f2;
-  --shadow: 3px 3px 0 var(--ink);
-  --shadow-hover: 5px 5px 0 var(--ink);
+  --on-grass: #fff;
+  --purple: var(--check);
+  --shadow-color: var(--ink);
+  --grid-dot: rgba(20,20,19,.07);
+  --tape-strip: rgba(247,239,227,.85);
+  --shadow: 3px 3px 0 var(--shadow-color);
+  --shadow-hover: 5px 5px 0 var(--shadow-color);
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
   --font-disp: 'Space Grotesk', 'Trebuchet MS', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151515;
+    --side: #1f1e1d;
+    --card: #30302e;
+    --ink: #faf9f5;
+    --muted: #a6a39a;
+    --line: #42413d;
+    --bubble: #1f1e1d;
+    --field: #262624;
+    --note: #3a342c;
+    --bar: #42413d;
+    --panel: #1a1a19;
+    --text-2: #c3c2b7;
+    --check: #2a78d6;
+    --menu: #20201f;
+    --strong: #f0efec;
+    --hover: rgba(255,255,255,.075);
+    --ring: rgba(255,255,255,.1);
+    --ring-strong: rgba(255,255,255,.2);
+    --divider: rgba(206,206,206,.06);
+    --grass: #6fbf8a;
+    --on-grass: #141413;
+    --shadow-color: rgba(0,0,0,.8);
+    --grid-dot: rgba(250,249,245,.06);
+    --tape-strip: rgba(58,52,44,.9);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #151515;
+  --side: #1f1e1d;
+  --card: #30302e;
+  --ink: #faf9f5;
+  --muted: #a6a39a;
+  --line: #42413d;
+  --bubble: #1f1e1d;
+  --field: #262624;
+  --note: #3a342c;
+  --bar: #42413d;
+  --panel: #1a1a19;
+  --text-2: #c3c2b7;
+  --check: #2a78d6;
+  --menu: #20201f;
+  --strong: #f0efec;
+  --hover: rgba(255,255,255,.075);
+  --ring: rgba(255,255,255,.1);
+  --ring-strong: rgba(255,255,255,.2);
+  --divider: rgba(206,206,206,.06);
+  --grass: #6fbf8a;
+  --on-grass: #141413;
+  --shadow-color: rgba(0,0,0,.8);
+  --grid-dot: rgba(250,249,245,.06);
+  --tape-strip: rgba(58,52,44,.9);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -29,7 +118,7 @@ html, body {
 
 body {
   font: 14px/1.5 var(--font-sans);
-  background-image: radial-gradient(circle at 1px 1px, rgba(26,22,17,.07) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0);
   background-size: 20px 20px;
 }
 
@@ -97,10 +186,72 @@ button, input, select { font: inherit; }
   text-decoration: none;
   white-space: nowrap;
 }
-.nav-link:hover { background: var(--rust); color: var(--paper); }
+.nav-link:hover { background: var(--rust); color: var(--accent-ink); }
+
+/* ── Theme control ───────────────────────────────────────────────────── */
+.theme-control { position: relative; display: flex; align-items: center; gap: 6px; }
+.theme-toggle {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--card);
+  color: var(--ink);
+  border: 1.5px solid var(--rust);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--rust); color: var(--accent-ink); }
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: none; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: block; }
+}
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 128px;
+  padding: 4px;
+  background: var(--menu);
+  border: 1.5px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+.theme-menu[hidden] { display: none; }
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font: 700 11px var(--font-mono);
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.theme-option:hover, .theme-option[aria-checked="true"] { background: var(--hover); }
+.theme-option .check { margin-left: auto; color: var(--check); visibility: hidden; }
+.theme-option[aria-checked="true"] .check { visibility: visible; }
+
 .model {
   font: 700 12px var(--font-mono);
-  background: #fff;
+  background: var(--card);
   padding: 5px 9px;
   border: 2px solid var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
@@ -110,20 +261,20 @@ button, input, select { font: inherit; }
   font: 700 12px var(--font-mono);
   text-transform: uppercase;
   background: var(--grass);
-  color: #fff;
+  color: var(--on-grass);
   padding: 6px 10px;
   border: 2px solid var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
   transform: rotate(-2deg);
   white-space: nowrap;
 }
-.status.off { background: var(--rust); }
+.status.off { background: var(--rust); color: var(--accent-ink); }
 .status.ok { background: var(--grass); }
 
 .btn {
   font: 700 12px var(--font-mono);
   padding: 8px 14px;
-  background: #fff;
+  background: var(--card);
   color: var(--ink);
   border: 2px solid var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
@@ -142,7 +293,7 @@ button, input, select { font: inherit; }
   grid-template-columns: 80px minmax(0, 1fr) minmax(0, 240px);
   gap: 24px;
   align-items: center;
-  background: #fff;
+  background: var(--card);
   padding: 24px;
   border: 2px solid var(--ink);
   box-shadow: var(--shadow);
@@ -272,7 +423,7 @@ button, input, select { font: inherit; }
 .chart-side { font-size: 11px; color: var(--ink-mute); }
 .chart-wrap {
   height: 150px;
-  background: #fff;
+  background: var(--card);
   border: 2px solid var(--ink);
   box-shadow: var(--shadow);
   padding: 12px;
@@ -293,7 +444,7 @@ button, input, select { font: inherit; }
 }
 .stat-card {
   position: relative;
-  background: #fff;
+  background: var(--card);
   border: 2px solid var(--ink);
   padding: 24px;
   box-shadow: var(--shadow);
@@ -307,7 +458,7 @@ button, input, select { font: inherit; }
   left: 50%;
   top: -9px;
   transform: translateX(-50%) rotate(-2deg);
-  background: rgba(242,215,110,.75);
+  background: var(--tape-strip);
   border: 1.5px solid var(--ink-faint);
 }
 .stat-card:hover { transform: translate(-2px,-2px); box-shadow: var(--shadow-hover); }
@@ -345,7 +496,7 @@ section { margin-bottom: 48px; }
 }
 .section-head .right { font: 12px var(--font-mono); color: var(--ink-mute); }
 .card, .lb {
-  background: #fff;
+  background: var(--card);
   border: 2px solid var(--ink);
   box-shadow: var(--shadow);
   position: relative;
@@ -423,8 +574,8 @@ footer {
   right: 24px;
   bottom: 24px;
   z-index: 50;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--panel);
+  color: var(--ink);
   font: 700 12px var(--font-mono);
   padding: 10px 14px;
   border: 2px solid var(--ink);
