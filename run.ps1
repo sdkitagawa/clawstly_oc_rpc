@@ -144,7 +144,7 @@ function Wait-ForUser {
 function Show-MainMenu {
   Show-Header -Clear
   Write-Host ' 1 -  Start all - Daemon / Dashboard Server.'
-  Write-Host ' 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.'
+  Write-Host ' 2 -  Stop all - Disable Plug-In, Stop Daemon/Dashboard, Force-stop leftovers.'
   Write-Host ' 3 -  Restart all.'
   Write-Host ' 4 -  Restart RPC only.'
   Write-Host ' 5 -  Plugin source.'
