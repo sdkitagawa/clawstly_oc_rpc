@@ -11,6 +11,8 @@
 
 import { createServer } from 'node:http';
 import { exec } from 'node:child_process';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import * as paths from '../paths.js';
 import { ROUTES, JSON_HEADERS } from './routes.js';
 import { buildHtml, buildSettingsHtml } from './page.js';
@@ -173,6 +175,20 @@ async function dashboardAlreadyUp(base) {
 
 let watcher = null;
 
+function writeDashboardPid() {
+  try {
+    mkdirSync(dirname(paths.DASHBOARD_PID_PATH), { recursive: true });
+    writeFileSync(paths.DASHBOARD_PID_PATH, String(process.pid));
+  } catch { /* best-effort — command-line sweep is the fallback */ }
+}
+
+function clearDashboardPid() {
+  try {
+    const current = Number(String(readFileSync(paths.DASHBOARD_PID_PATH, 'utf8')).trim());
+    if (current === process.pid) unlinkSync(paths.DASHBOARD_PID_PATH);
+  } catch { /* already gone */ }
+}
+
 server.on('error', async (e) => {
   if (server.listening) {
     try { console.error('dashboard error:', e?.message || e); } catch { /* ignore */ }
@@ -192,6 +208,7 @@ server.on('error', async (e) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
+  writeDashboardPid();
   watcher = watchSources();
   const base = `http://127.0.0.1:${PORT}`;
   console.log(`Clawstly OpenCode RPC dashboard: ${base}`);
@@ -200,6 +217,7 @@ server.listen(PORT, '127.0.0.1', () => {
 });
 
 function shutdown() {
+  clearDashboardPid();
   try { watcher?.close(); } catch { /* ignore */ }
   try { server.close(() => process.exit(0)); } catch { process.exit(0); }
   setTimeout(() => process.exit(0), 500).unref?.();
