@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
-# Clawstly - easy RPC control for Git Bash / WSL.
+# Clawstly - easy RPC control for Git Bash / WSL / macOS / Linux.
 
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CLI="$ROOT/bin/clawstly-oc-rpc.js"
-CLI_WIN="$CLI"
+NODE_SCRIPT="$CLI"
 APP="Clawstly"
 PORT=47474
+
+# Git Bash / MSYS / Cygwin run the Windows Node binary and need a Windows-style
+# script path plus netstat/start helpers. Native Linux/macOS need none of that:
+# they use the POSIX path, curl/xdg-open, and never invoke cmd.exe or PowerShell.
+UNAME_S="$(uname -s 2>/dev/null || true)"
+case "$UNAME_S" in
+  MINGW*|MSYS*|CYGWIN*) WINDOWS_SHELL=1 ;;
+  *) WINDOWS_SHELL=0 ;;
+esac
+# WSL reports Linux but has no native node — only cmd.exe + Windows node.exe.
+# Treat that as a Windows-interop shell so paths and helpers are translated.
+if [ "$WINDOWS_SHELL" -eq 0 ] && ! command -v node >/dev/null 2>&1 \
+   && command -v cmd.exe >/dev/null 2>&1; then
+  WINDOWS_SHELL=1
+fi
+if [ "$WINDOWS_SHELL" -eq 0 ] && [ -n "${WINDIR:-}" ]; then WINDOWS_SHELL=1; fi
 
 to_win_path() {
   local p="$1" drive rest
@@ -24,11 +40,13 @@ to_win_path() {
   esac
 }
 
-# Windows Node needs a Windows-style script path, even when launched from Git Bash.
-if command -v cygpath >/dev/null 2>&1; then
-  CLI_WIN="$(cygpath -w "$CLI")"
-else
-  CLI_WIN="$(to_win_path "$CLI")"
+# Only Git Bash/MSYS need the path translated for the Windows Node binary.
+if [ "$WINDOWS_SHELL" -eq 1 ]; then
+  if command -v cygpath >/dev/null 2>&1; then
+    NODE_SCRIPT="$(cygpath -w "$CLI")"
+  else
+    NODE_SCRIPT="$(to_win_path "$CLI")"
+  fi
 fi
 
 to_posix_path() {
@@ -79,11 +97,11 @@ if [ ! -f "$CLI" ]; then
   exit 1
 fi
 
-# Git Bash normally inherits Node on PATH. If it does not, fall back to the
-# Windows `where node` lookup so the launcher still works from a plain shell.
+# Node must be on PATH on every platform. Git Bash can fall back to cmd.exe's
+# `node` lookup only when it is actually a Windows shell.
 NODE=(node)
 if ! command -v node >/dev/null 2>&1; then
-  if command -v cmd.exe >/dev/null 2>&1; then
+  if [ "$WINDOWS_SHELL" -eq 1 ] && command -v cmd.exe >/dev/null 2>&1; then
     NODE=(cmd.exe /c node)
   else
     echo "Node.js was not found on PATH. Install Node 18+ and try again."
@@ -93,7 +111,7 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 rpc() {
-  (cd "$ROOT" && "${NODE[@]}" "$CLI_WIN" "$@")
+  (cd "$ROOT" && "${NODE[@]}" "$NODE_SCRIPT" "$@")
 }
 
 read_config() {
@@ -136,6 +154,13 @@ daemon_pid() {
   printf '%s\n' "$pid"
 }
 
+source_label() {
+  local value
+  value="$(rpc source status --short 2>/dev/null)"
+  value="${value//$'\r'/}"
+  [ -n "$value" ] && printf '%s\n' "$value" || printf 'none\n'
+}
+
 pause_user() {
   echo
   read -r -p "Press ENTER to continue." _ || true
@@ -143,7 +168,7 @@ pause_user() {
 
 header() {
   clear 2>/dev/null || true
-  local cfg app model metric pid
+  local cfg app model metric pid source dash
   cfg="$(read_config)"
   {
     IFS= read -r app
@@ -154,8 +179,11 @@ header() {
   [ -n "$pid" ] || pid="stopped"
   [ -n "$app" ] || app="$APP"
   [ -n "$model" ] || model="real model"
+  source="$(source_label)"
+  if [ ${#source} -gt 52 ]; then source="...${source: -49}"; fi
+  if dashboard_up; then dash="listening ($PORT)"; else dash="stopped"; fi
 
-  local label="$APP - RPC control" inner=48 pad left right
+  local label="$APP - RPC control" inner=60 pad left right
   pad=$((inner - ${#label}))
   [ "$pad" -lt 0 ] && pad=0
   left=$(((pad + 1) / 2))
@@ -164,27 +192,51 @@ header() {
   printf '|%*s%s%*s|\n' "$left" '' "$label" "$right" ''
   printf '+%*s+\n' "$inner" '' | tr ' ' '-'
   echo
-  echo " Daemon : $pid"
-  echo " App    : $app"
-  echo " Model  : $model"
-  echo " Metric : $metric"
+  echo " Daemon    : $pid"
+  echo " Dashboard : $dash"
+  echo " Source    : $source"
+  echo " App       : $app"
+  echo " Model     : $model"
+  echo " Metric    : $metric"
   echo
 }
 
 main_menu() {
   header
   cat <<'EOF'
- 1  Start RPC
- 2  Stop RPC
- 3  Restart RPC
- 4  Status
- 5  Health check
- 6  Open dashboard
- 7  Change displayed model
- 8  Token / cost display
- 9  Exit
+ 1   Start all - Daemon / Dashboard Server.
+ 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.
+ 3   Restart all.
+ 4   Restart RPC only.
+ 5   Plugin source.
+ 6   Open dashboard.
+ 7   Status.
+ 8   Health check.
+ 9   Change displayed model.
+10   Token / Cost display.
+11   Start RPC only (Daemon).
+12   Stop RPC only (Daemon).
+13   Start Dashboard -> Browser.
+14   Exit.
 
 EOF
+}
+
+source_menu() {
+  header
+  echo "Which OpenCode plugin copy should be loaded?"
+  echo
+  if [ "$WINDOWS_SHELL" -eq 1 ]; then
+    echo " C   Local source (C: working copy)"
+    echo " D   Mirror (D: git copy)"
+  else
+    echo " L   Local source (this install)"
+    echo " M   Mirror path (CLAWSTLY_PLUGIN_MIRROR)"
+  fi
+  echo " P   Custom absolute path..."
+  echo " S   Show current registration"
+  echo " 0   Back"
+  echo
 }
 
 model_menu() {
@@ -221,9 +273,9 @@ EOF
 
 dashboard_up() {
   local url="http://127.0.0.1:$PORT/api/settings"
-  # Git Bash's curl cannot always see a Windows loopback socket started by a
-  # hidden PowerShell child, so ask Windows netstat first.
-  if command -v cmd.exe >/dev/null 2>&1; then
+  # Git Bash's curl cannot always see a Windows loopback socket, so ask Windows
+  # netstat first there. Native Linux/macOS use curl/wget directly.
+  if [ "$WINDOWS_SHELL" -eq 1 ] && command -v cmd.exe >/dev/null 2>&1; then
     # No grep -q here: closing the pipe early gives cmd.exe SIGPIPE, and with
     # pipefail that makes a successful LISTENING match look like a failure.
     cmd.exe /c netstat -ano 2>/dev/null | grep -F "127.0.0.1:$PORT" | grep -F "LISTENING" >/dev/null 2>&1
@@ -236,30 +288,47 @@ dashboard_up() {
   fi
 }
 
-start_dashboard() {
-  local url="http://127.0.0.1:$PORT" up=0 i
-  if dashboard_up; then
-    up=1
-  else
-    (cd "$ROOT" && CLAWSTLY_RPC_NO_OPEN=1 "${NODE[@]}" "$CLI_WIN" serve >/dev/null 2>&1 &)
-    for i in $(seq 1 20); do
-      if dashboard_up; then up=1; break; fi
-      sleep 0.25
-    done
+open_browser() {
+  local url="http://127.0.0.1:$PORT"
+  if [ "$WINDOWS_SHELL" -eq 1 ] && command -v cmd.exe >/dev/null 2>&1; then
+    cmd.exe /c start "" "$url" >/dev/null 2>&1 || true
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 || true
+  elif command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || true
   fi
-  if [ "$up" -eq 1 ]; then
-    if command -v cmd.exe >/dev/null 2>&1; then
-      cmd.exe /c start "" "$url" >/dev/null 2>&1 || true
-    elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "$url" >/dev/null 2>&1 || true
-    elif command -v open >/dev/null 2>&1; then
-      open "$url" >/dev/null 2>&1 || true
-    fi
-    echo "Dashboard: $url"
+}
+
+open_dashboard() {
+  rpc dashboard-start || true
+  if dashboard_up; then
+    open_browser
+    echo "Dashboard: http://127.0.0.1:$PORT"
   else
-    echo "Dashboard did not start on $url" >&2
+    echo "Dashboard did not start on http://127.0.0.1:$PORT" >&2
     echo "Start it manually with: node bin/clawstly-oc-rpc.js serve" >&2
   fi
+}
+
+source_choice() {
+  source_menu
+  local choice path
+  read -r -p "Choice: " choice
+  choice="${choice%$'\r'}"
+  choice="$(printf '%s' "$choice" | tr '[:lower:]' '[:upper:]')"
+  case "$choice" in
+    C|L) rpc source L || true; pause_user ;;
+    D|M) rpc source M || true; pause_user ;;
+    S) rpc source status || true; pause_user ;;
+    P)
+      read -r -p "Absolute plugin directory: " path
+      path="${path%$'\r'}"
+      [ -n "$path" ] && rpc source "$path" || true
+      pause_user
+      ;;
+    0) ;;
+    *) echo "Unknown choice."; pause_user ;;
+  esac
 }
 
 model_choice() {
@@ -308,17 +377,25 @@ if [ "$#" -gt 0 ]; then
   action="$1"
   shift
   case "$action" in
+    start-all) rpc start-all; exit $? ;;
+    stop-all) rpc stop-all; exit $? ;;
+    restart-all) rpc restart-all; exit $? ;;
+    restart-rpc) rpc restart; exit $? ;;
     start) rpc start; exit $? ;;
     stop) rpc stop; exit $? ;;
     restart) rpc restart; exit $? ;;
+    source) rpc source "$@"; exit $? ;;
     status) rpc status; exit $? ;;
     doctor) rpc doctor; exit $? ;;
-    dashboard) start_dashboard; exit 0 ;;
+    dashboard) open_dashboard; exit 0 ;;
+    dashboard-start) rpc dashboard-start; exit $? ;;
+    dashboard-stop) rpc dashboard-stop; exit $? ;;
+    dashboard-status) rpc dashboard-status; exit $? ;;
     model) rpc model "$@"; exit $? ;;
     metric) rpc metric "$@"; exit $? ;;
     *)
       echo "Unknown action: $action"
-      echo "start | stop | restart | status | doctor | dashboard | model | metric"
+      echo "start-all | stop-all | restart-all | restart-rpc | start | stop | source | dashboard | dashboard-start | dashboard-stop | dashboard-status | status | doctor | model | metric"
       exit 1
       ;;
   esac
@@ -330,15 +407,20 @@ while true; do
   read -r -p "Choice: " choice || exit 0
   choice="${choice%$'\r'}"
   case "$choice" in
-    1) rpc start || true; pause_user ;;
-    2) rpc stop || true; pause_user ;;
-    3) rpc restart || true; pause_user ;;
-    4) rpc status || true; pause_user ;;
-    5) rpc doctor || true; pause_user ;;
-    6) start_dashboard; pause_user ;;
-    7) model_choice ;;
-    8) metric_choice ;;
-    9) exit 0 ;;
+    1) rpc start-all || true; pause_user ;;
+    2) rpc stop-all || true; pause_user ;;
+    3) rpc restart-all || true; pause_user ;;
+    4) rpc restart || true; pause_user ;;
+    5) source_choice ;;
+    6) open_dashboard; pause_user ;;
+    7) rpc status || true; pause_user ;;
+    8) rpc doctor || true; pause_user ;;
+    9) model_choice ;;
+    10) metric_choice ;;
+    11) rpc start || true; pause_user ;;
+    12) rpc stop || true; pause_user ;;
+    13) open_dashboard; pause_user ;;
+    14) exit 0 ;;
     *) echo "Unknown choice."; pause_user ;;
   esac
 done
