@@ -95,6 +95,12 @@ Four launchers are included so you never have to type a command:
 launchers share the same behavior. Requirements: Node 18+ on `PATH`, and the
 project folder in place. No build step is needed.
 
+All four launchers follow the **currently selected plugin source** (see option
+5 below). It does not matter which copy's launcher you double-click: every
+launcher resolves the active registration and then runs that copy's CLI and
+reads that copy's `config.json`. So the model you last selected is the same no
+matter which launcher you use.
+
 With no arguments they open this menu (identical in all four launchers):
 
 ```text
@@ -237,7 +243,7 @@ The Discord card shows **Clawstly** as its app name. Two config keys control wha
 - `displayModel` - the model name Discord sees. Defaults to `Claude Opus`. Choices: `GPT Sol`, `GPT Luna`, `GPT Astra`, `Claude Opus`, `Claude Sonnet`, `Claude Haiku`, `Claude Fable`, a custom label, or blank to use the real model. This never changes the model OpenCode actually runs.
 - `displayMetric` - `tokens`, `cost`, or `both`. Defaults to `cost`, rendered with `≈` because it is an estimate from local pricing data, not a bill.
 
-Use launcher menu options **7** and **8**, the `/settings` page, or the `model` and `metric` commands above. Changes restart the daemon so the card updates immediately.
+Use launcher menu options **9** (Change displayed model) and **10** (Token / Cost display), the `/settings` page, or the `model` and `metric` commands above. Changes restart the daemon so the card updates immediately.
 
 The dashboard keeps a timestamped record of the displayed model. Each session row shows the label that was active when that session was last active, so switching models does **not** relabel older rows; only new activity uses the new label. Selecting `real` is recorded too, and those rows fall back to the actual OpenCode model. The header badge and Discord card always show the current label.
 
