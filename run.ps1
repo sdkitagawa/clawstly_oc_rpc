@@ -20,6 +20,25 @@ if (-not $nodeCommand) {
   exit 1
 }
 $Node = $nodeCommand.Source
+
+# The source selected in menu option 5 is canonical. Follow whichever install
+# OpenCode registers as the plugin source so both launchers read and write the
+# same config.json and model history instead of each copy keeping its own stale
+# displayModel.
+$LocalCli = $Cli
+try {
+  $registered = (& $Node $LocalCli source status --short 2>$null | Out-String).Trim()
+  if ($registered -and (Test-Path -LiteralPath $registered -PathType Container)) {
+    $candidateRoot = Split-Path -Parent $registered
+    $candidateCli = Join-Path $candidateRoot 'bin\clawstly-oc-rpc.js'
+    if (Test-Path -LiteralPath $candidateCli) {
+      $Root = $candidateRoot
+      $Cli = $candidateCli
+    }
+  }
+} catch { # keep using this copy when the registration cannot be read
+}
+
 Set-Location -LiteralPath $Root
 
 function Invoke-Rpc {
