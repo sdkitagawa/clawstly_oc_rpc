@@ -5,9 +5,12 @@
 import { loadAsset } from './assets.js';
 
 function compose(template, styles, script, port) {
+  // Theme controls are shared by both pages; load the runtime here so there is
+  // only one implementation to maintain. It runs before the page-specific JS.
+  const withTheme = loadAsset('theme.client.js') + '\n' + script;
   return template
     .replaceAll('{{STYLES}}', () => styles)
-    .replaceAll('{{SCRIPT}}', () => script)
+    .replaceAll('{{SCRIPT}}', () => withTheme)
     .replaceAll('{{PORT}}', String(port));
 }
 
