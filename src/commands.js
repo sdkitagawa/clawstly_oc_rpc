@@ -35,16 +35,52 @@ export const COMMANDS = [
   { name: 'insights', group: 'stats', summary: 'Patterns spotted in your OpenCode history' },
 
   // ── Daemon & dashboard ──
-  { name: 'start', group: 'daemon', summary: 'Start the Discord presence daemon' },
-  { name: 'stop', group: 'daemon', summary: 'Stop it and keep it off until start' },
-  { name: 'restart', group: 'daemon', summary: 'Restart it and wait until it is up' },
   {
-    name: 'serve', group: 'daemon', summary: 'Start the local dashboard server',
+    name: 'start-all', group: 'daemon',
+    summary: 'Start daemon + dashboard server (no browser)',
+    examples: ['clawstly-oc-rpc start-all'],
+  },
+  {
+    name: 'stop-all', group: 'daemon',
+    summary: 'Stop daemon + server, force-stop leftovers',
+    examples: ['clawstly-oc-rpc stop-all'],
+  },
+  {
+    name: 'restart-all', group: 'daemon',
+    summary: 'Restart daemon + dashboard server',
+    examples: ['clawstly-oc-rpc restart-all'],
+  },
+  { name: 'start', group: 'daemon', summary: 'Start only the Discord presence daemon' },
+  { name: 'stop', group: 'daemon', summary: 'Stop only the daemon and keep it off until start' },
+  { name: 'restart', group: 'daemon', summary: 'Restart only the daemon' },
+  { name: 'daemon-start', group: 'daemon', summary: 'Alias: start only the daemon' },
+  { name: 'daemon-stop', group: 'daemon', summary: 'Alias: stop only the daemon' },
+  {
+    name: 'serve', group: 'daemon', summary: 'Start the local dashboard server (opens browser)',
     flags: [['--port', 'Port to listen on (default 47474)', 'any']],
     examples: ['clawstly-oc-rpc serve', 'clawstly-oc-rpc serve --port 5000'],
   },
+  { name: 'dashboard-start', group: 'daemon', summary: 'Start the dashboard server without a browser' },
+  { name: 'dashboard-stop', group: 'daemon', summary: 'Stop the dashboard server' },
+  { name: 'dashboard-status', group: 'daemon', summary: 'Report dashboard server status' },
+  { name: 'processes', group: 'daemon', summary: 'List daemon/dashboard Node processes (JSON)' },
 
   // ── Configure ──
+  {
+    name: 'source', group: 'config', summary: 'Show or set which OpenCode plugin copy is loaded',
+    usage: '[C|D|L|M|<absolute path>|status]',
+    subs: [
+      ['status', 'Show the active registration and config path'],
+      ['C / L', 'Use this install\'s plugin directory (Windows / macOS-Linux)'],
+      ['D / M', 'Use the optional mirror plugin directory'],
+    ],
+    examples: [
+      'clawstly-oc-rpc source status',
+      'clawstly-oc-rpc source C',
+      'clawstly-oc-rpc source L',
+      'clawstly-oc-rpc source /opt/clawstly/plugin',
+    ],
+  },
   {
     name: 'model', group: 'config', summary: 'Set the model name Discord sees (RPC only)',
     usage: '[alias|custom label]',
