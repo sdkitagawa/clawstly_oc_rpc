@@ -11,7 +11,7 @@ import { resetState, updateState, readState, removeState, pushUnique, shortFile 
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
 import { recordEvent } from '../src/scanner.js';
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
-import { spawnDaemonDetached, daemonAlive } from '../src/ensure-daemon.js';
+import { spawnDaemonDetached, daemonAlive, isStopped } from '../src/ensure-daemon.js';
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
 import { humanModel } from '../src/format.js';
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
@@ -150,9 +150,16 @@ function humanModelSafe(id: string | null): string | null {
   try { return text(humanModel(id)) ?? null; } catch { return null; }
 }
 
+// `stop all` writes the shared no-respawn marker. The plugin reads it on every
+// side effect so it becomes inert immediately, without stopping OpenCode.
+function pluginDisabled(): boolean {
+  try { return !!isStopped(); } catch { return false; }
+}
+
 // Every filesystem mutation goes through here. Never let a state error reach
 // an OpenCode hook or event consumer.
 function mutate(sessionId: string | null, fn: (state: Bag) => Bag | void): void {
+  if (pluginDisabled()) return;
   try {
     updateState((state: Bag) => {
       const next = fn(state);
@@ -173,6 +180,7 @@ function touch(state: Bag, status?: string): Bag {
 }
 
 function emit(kind: EventKind, fields: Bag = {}): void {
+  if (pluginDisabled()) return;
   try {
     const cwd = text(fields.cwd) ?? FALLBACK_CWD;
     const ts = number(fields.ts) ?? Date.now();
@@ -457,7 +465,7 @@ export default Plugin.define({
       const env = PROC?.env ?? {};
       if (env.CLAWSTLY_OC_RPC_NO_AUTOSTART === '1') autostart = false;
 
-      if (autostart) {
+      if (autostart && !pluginDisabled()) {
         let alive = false;
         try { alive = !!daemonAlive(); } catch { /* unknown */ }
         if (!alive) {
@@ -897,7 +905,7 @@ export default Plugin.define({
 
     async function handleEvent(event: any): Promise<void> {
       const type = String(first(obj(event).type, obj(event).event, obj(event).kind) ?? '').toLowerCase();
-      if (!type) return;
+      if (!type || pluginDisabled()) return;
       const payload = first(obj(event).properties, obj(event).data, event) ?? {};
       const sessionId = sessionIdFrom(event, payload);
       rememberSeen(sessionId);
@@ -908,23 +916,25 @@ export default Plugin.define({
         const model = info.display ?? humanModelSafe(info.modelId) ?? 'opencode';
         const ts = Date.now();
         try {
-          resetState({
-            cwd: cwd ?? null,
-            model,
-            project: projectOf(cwd),
-            status: 'idle',
-            lastActivity: ts,
-            lastEventAt: ts,
-            opencodeClosed: false,
-            sessionStart: ts,
-          }, sessionId ?? undefined);
+          if (!pluginDisabled()) {
+            resetState({
+              cwd: cwd ?? null,
+              model,
+              project: projectOf(cwd),
+              status: 'idle',
+              lastActivity: ts,
+              lastEventAt: ts,
+              opencodeClosed: false,
+              sessionStart: ts,
+            }, sessionId ?? undefined);
+          }
         } catch { /* best effort */ }
         emit('session', { sessionId, cwd, model, ts });
         return;
       }
 
       if (type.startsWith('session.deleted') || type.startsWith('session.removed')) {
-        try { removeState(sessionId ?? undefined); } catch { /* best effort */ }
+        try { if (!pluginDisabled()) removeState(sessionId ?? undefined); } catch { /* best effort */ }
         if (sessionId) seenSessions.delete(sessionId);
         return;
       }
