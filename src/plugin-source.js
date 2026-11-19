@@ -257,7 +257,7 @@ export function sourceStatus() {
   const configs = discoverConfigs().map((cfg) => {
     const read = cfg.exists ? readConfig(cfg.path) : { raw: '', entries: [] };
     const ours = read.entries.filter(isOurPluginEntry);
-    return { ...cfg, entries: read.entries, ours };
+    return { ...cfg, raw: read.raw, entries: read.entries, ours };
   });
   const active = configs.find((cfg) => cfg.writable && cfg.ours.length) || null;
   return {
@@ -271,28 +271,68 @@ export function sourceStatus() {
   };
 }
 
+// Human-readable problems with the current registrations. OpenCode loads every
+// config it discovers, so two entries (or two files) registering the same plugin
+// ID make /plugins report "clawstly-oc-rpc failed" even when both paths exist.
+export function pluginRegistrationIssues(status = sourceStatus()) {
+  const issues = [];
+  for (const cfg of status.configs) {
+    if (!cfg.exists || cfg.system) continue;
+    if (cfg.ours.length > 1) {
+      issues.push(`${cfg.ours.length} clawstly entries in ${cfg.path}`);
+    }
+    // V1 object mappings ("plugins": { "clawstly-oc-rpc": ... }) are ignored by
+    // V2 but still mislead users, so surface them as stale registrations.
+    if (/"plugins"\s*:\s*\{/i.test(cfg.raw || '') && /clawstly[-_]oc[-_]rpc/i.test(cfg.raw || '')) {
+      issues.push(`stale object-format plugin mapping in ${cfg.path}`);
+    }
+  }
+  const registered = status.configs.filter((cfg) => cfg.exists && cfg.ours.length);
+  if (registered.length > 1) {
+    issues.push(`registrations split across ${registered.length} configs: ${registered.map((c) => c.path).join(', ')}`);
+  }
+  return issues;
+}
+
 export function setPluginSource(input) {
   const target = resolveSource(input);
   const all = sourceStatus();
-  const cfg = all.active
+  const primary = all.active
     || all.configs.find((c) => c.writable && c.group !== 'system' && c.group !== 'project' && c.exists)
     || all.configs.find((c) => c.writable && c.group !== 'system' && c.group !== 'project')
     || null;
 
-  if (!cfg || !cfg.writable) throw new Error('no writable OpenCode config found — set OPENCODE_CONFIG');
-  const path = cfg.path;
-  const { raw, entries } = readConfig(path);
-  const kept = entries.filter((entry) => !isOurPluginEntry(entry));
-  kept.push(target);
-  const next = replacePluginsArray(raw, kept);
-  if (next !== raw || !existsSync(path)) {
-    if (cfg.exists === false) {
-      try { mkdirSync(dirname(path), { recursive: true }); } catch { /* best-effort */ }
-    }
-    writeFileAtomic(path, next.endsWith('\n') ? next : `${next}\n`);
-    return { changed: true, path, target };
+  if (!primary || !primary.writable) throw new Error('no writable OpenCode config found — set OPENCODE_CONFIG');
+
+  const touched = [];
+  // Consolidate: remove our entries from EVERY writable config, not just the
+  // primary. A duplicate in a second file still produces a duplicate plugin ID.
+  for (const cfg of all.configs) {
+    if (!cfg.writable || cfg.system || !cfg.exists) continue;
+    const { raw, entries } = readConfig(cfg.path);
+    if (!entries.some(isOurPluginEntry)) continue;
+    const kept = entries.filter((entry) => !isOurPluginEntry(entry));
+    if (cfg.path === primary.path) kept.push(target);
+    const next = replacePluginsArray(raw, kept);
+    writeFileAtomic(cfg.path, next.endsWith('\n') ? next : `${next}\n`);
+    touched.push(cfg.path);
   }
-  return { changed: false, path, target };
+  // A fresh install may have no prior entry to replace in the primary config.
+  if (!touched.includes(primary.path)) {
+    const { raw, entries } = readConfig(primary.path);
+    const kept = entries.filter((entry) => !isOurPluginEntry(entry));
+    kept.push(target);
+    const next = replacePluginsArray(raw, kept);
+    if (primary.exists === false) {
+      try { mkdirSync(dirname(primary.path), { recursive: true }); } catch { /* best-effort */ }
+    }
+    writeFileAtomic(primary.path, next.endsWith('\n') ? next : `${next}\n`);
+    touched.push(primary.path);
+  }
+  return { changed: touched.length > 0, path: primary.path, target, cleaned: touched };
 }
 
-export default { sourcePresets, resolveSource, discoverConfigs, isOurPluginEntry, readPluginsArray, replacePluginsArray, sourceStatus, setPluginSource };
+export default {
+  sourcePresets, resolveSource, discoverConfigs, isOurPluginEntry,
+  readPluginsArray, replacePluginsArray, sourceStatus, pluginRegistrationIssues, setPluginSource,
+};
