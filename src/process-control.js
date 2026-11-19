@@ -1,10 +1,11 @@
 // Cross-platform process control for the RPC daemon and the dashboard server.
 //
 // The launchers expose "all" (daemon + dashboard) and per-component actions.
-// A clean stop always runs first (pid files + stop marker so OpenCode cannot
-// immediately respawn the daemon); a command-line sweep then force-stops any
-// leftover node.exe / node process that still runs OUR daemon or dashboard
-// script. Unrelated Node processes and OpenCode itself are never touched.
+// The stop marker is written first: it keeps the OpenCode plugin inert (no
+// state writes, no daemon respawn) while OpenCode itself stays running. Clean
+// stops follow (pid files for the daemon and dashboard), then a command-line
+// sweep force-stops any leftover node.exe / node process still running OUR
+// daemon or dashboard script. Unrelated Node processes are never touched.
 
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
@@ -124,8 +125,8 @@ export function startDaemonOnly() {
   return { started: Boolean(child?.pid), pid: child?.pid || 0 };
 }
 
-export async function stopDaemonOnly() {
-  markStopped(); // sticky: OpenCode cannot respawn until start
+export async function stopDaemonOnly({ mark = true } = {}) {
+  if (mark) markStopped(); // sticky: plugin stays inert until start
   const pid = daemonAlive();
   let clean = true;
   if (pid) clean = await stopDaemonAndWait();
@@ -189,12 +190,36 @@ export async function startAll() {
   return { daemon, dashboard };
 }
 
-export async function stopAll() {
-  const daemon = await stopDaemonOnly();
-  const dashboard = await stopDashboardOnly();
+export async function stopAll({
+  mark = markStopped,
+  stopDaemon = stopDaemonOnly,
+  stopDashboard = stopDashboardOnly,
+  sweep = forceKill,
+  find = findRpcProcesses,
+  up = dashboardUp,
+} = {}) {
+  // Disable the plug-in before anything else: a running OpenCode process must
+  // not observe a half-stopped daemon and spawn a replacement.
+  const pluginDisabled = Boolean(mark());
+  const daemon = await stopDaemon({ mark: false });
+  const dashboard = await stopDashboard();
   // Final sweep catches a process that appeared between the two clean stops.
-  const killed = await forceKill(findRpcProcesses());
-  return { daemon, dashboard, killed };
+  const killed = await sweep(find());
+  const dashboardStopped = !(await up());
+  const leftovers = find();
+  return {
+    daemon,
+    dashboard: { ...dashboard, stopped: dashboardStopped },
+    killed,
+    plugin: { disabled: pluginDisabled, marker: STOPPED_PATH },
+    leftovers,
+    stopped: {
+      daemon: Boolean(daemon.stopped),
+      dashboard: dashboardStopped,
+      plugin: pluginDisabled,
+      leftovers: leftovers.length === 0,
+    },
+  };
 }
 
 export async function restartAll() {
@@ -211,6 +236,7 @@ export async function rpcReport() {
     processes: procs,
     daemonProcesses: procs.filter((proc) => proc.kind === 'daemon'),
     dashboardProcesses: procs.filter((proc) => proc.kind === 'dashboard'),
+    pluginDisabled: existsSync(STOPPED_PATH),
     stoppedMarker: existsSync(STOPPED_PATH),
   };
 }
