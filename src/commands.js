@@ -42,7 +42,7 @@ export const COMMANDS = [
   },
   {
     name: 'stop-all', group: 'daemon',
-    summary: 'Stop daemon + server, force-stop leftovers',
+    summary: 'Disable plug-in, stop daemon + server, force-stop leftovers',
     examples: ['clawstly-oc-rpc stop-all'],
   },
   {
