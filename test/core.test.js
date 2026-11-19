@@ -5,6 +5,10 @@ import { EVENTS, pluginSnippet } from '../src/install.js';
 import { pickActiveSession, resolveLargeImageKey, throttleDecision } from '../src/presence.js';
 import { dayKeyAt, weekKey, cleanProjectName, emptyAggregate } from '../src/scanner.js';
 import { validateConfig } from '../src/server/settings.js';
+import {
+  isOurPluginEntry, readPluginsArray, replacePluginsArray, sourceStatus,
+} from '../src/plugin-source.js';
+import { classifyCommand } from '../src/process-control.js';
 import { statePathFor } from '../src/state.js';
 
 export async function run({ test, assert }) {
@@ -116,5 +120,32 @@ export async function run({ test, assert }) {
   test('state paths sanitize session IDs', () => {
     const p = statePathFor('abc/def:123');
     assert(/state-abcdef123\.json$/.test(p.replace(/\\/g, '/')));
+  });
+
+  test('plugin source replacement preserves JSONC comments and other keys', () => {
+    const raw = '{\n  // keep this comment\n  "model": "anthropic/claude-sonnet-4-5",\n  "plugins": [\n    "old\\plugin",\n    "other-plugin"\n  ]\n}\n';
+    assert.equal(isOurPluginEntry('C:\\work\\clawstly_oc_rpc\\plugin'), true);
+    assert.equal(isOurPluginEntry('D:/mirror/clawstly_oc_rpc/plugin'), true);
+    assert.equal(isOurPluginEntry('some-other-plugin'), false);
+    const out = replacePluginsArray(raw, ['other-plugin', 'D:\\mirror\\clawstly_oc_rpc\\plugin']);
+    assert(out.includes('// keep this comment'));
+    assert(out.includes('"model": "anthropic/claude-sonnet-4-5"'));
+    assert.deepEqual(readPluginsArray(out), ['other-plugin', 'D:\\mirror\\clawstly_oc_rpc\\plugin']);
+  });
+
+  test('source status discovers configs without a registration', () => {
+    const status = sourceStatus();
+    assert(Array.isArray(status.configs));
+    assert(status.configs.some((cfg) => cfg.group === 'global'));
+    assert(typeof status.activeTarget === 'string');
+    assert((status.presets.C || status.presets.L).endsWith('plugin'));
+  });
+
+  test('process classifier only matches our daemon and dashboard', () => {
+    assert.equal(classifyCommand('node "D:\\mirror\\clawstly_oc_rpc\\src\\daemon.js"'), 'daemon');
+    assert.equal(classifyCommand('node /work/clawstly_oc_rpc/src/daemon.js'), 'daemon');
+    assert.equal(classifyCommand('node "C:\\work\\bin\\clawstly-oc-rpc.js" serve'), 'dashboard');
+    assert.equal(classifyCommand('node other-project.js'), null);
+    assert.equal(classifyCommand('opencode.exe serve --service'), null);
   });
 }
