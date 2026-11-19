@@ -411,6 +411,105 @@ async function metricCommand(argv) {
   info('discord card', `now showing ${METRIC_MODES.find((m) => m.value === next)?.label || next}`);
 }
 
+// ── plugin source / process control ──────────────────────────────────────
+
+async function sourceCommand(argv) {
+  const src = await import('./plugin-source.js');
+  const sub = String(argv[0] || 'status').toLowerCase();
+  if (sub === 'status' || sub === 'show') {
+    const st = src.sourceStatus();
+    if (argv.includes('--json')) { console.log(JSON.stringify(st, null, 2)); return; }
+    if (argv.includes('--short')) { console.log(st.activeTarget || 'none'); return; }
+    console.log('');
+    ok('config', st.active?.path || 'none (no registration found)');
+    ok('source', st.activeTarget || 'none');
+    for (const [key, path] of Object.entries(st.presets)) {
+      info(`preset ${key}`, path || 'not available on this platform');
+    }
+    if (st.systemDirs.length) info('system dirs (read-only)', st.systemDirs.join(', '));
+    console.log('');
+    return;
+  }
+  let result;
+  try {
+    result = src.setPluginSource(argv.join(' '));
+  } catch (error) {
+    fail(`plugin source: ${error.message}`, {
+      hint: 'use: source C | source D | source <absolute path>', code: EX_USER_ERROR,
+    });
+  }
+  if (result.changed) ok('plugin source', result.target);
+  else info('plugin source', `${result.target} (already set)`);
+  ok('config', shortPath(result.path));
+  // The running daemon belongs to the old copy. Stop it so the newly loaded
+  // plugin starts its own daemon from the selected source.
+  const pc = await import('./process-control.js');
+  await pc.stopDaemonOnly();
+  info('daemon', 'stopped — restart OpenCode to load the new source');
+}
+
+async function processCommand(kind) {
+  const pc = await import('./process-control.js');
+  switch (kind) {
+    case 'processes':
+      console.log(JSON.stringify(await pc.rpcReport(), null, 2));
+      return;
+    case 'start-all': {
+      const result = await pc.startAll();
+      ok('daemon', result.daemon.pid ? `running (pid ${result.daemon.pid})` : 'not started');
+      ok('dashboard', result.dashboard.up ? `http://127.0.0.1:${DASHBOARD_PORT}` : 'not started');
+      return;
+    }
+    case 'stop-all': {
+      const result = await pc.stopAll();
+      ok('daemon', result.daemon.stopped ? 'stopped' : 'still running');
+      ok('dashboard', result.dashboard.stopped ? 'stopped' : 'still running');
+      if (result.killed.length) info('force-stopped', result.killed.join(', '));
+      return;
+    }
+    case 'restart-all': {
+      const result = await pc.restartAll();
+      ok('daemon', result.daemon.pid ? `running (pid ${result.daemon.pid})` : 'not started');
+      ok('dashboard', result.dashboard.up ? `http://127.0.0.1:${DASHBOARD_PORT}` : 'not started');
+      return;
+    }
+    case 'daemon-start': {
+      const result = pc.startDaemonOnly();
+      ok('daemon', result.pid ? (result.started ? `started (pid ${result.pid})` : `already running (pid ${result.pid})`) : 'failed to start');
+      return;
+    }
+    case 'daemon-stop': {
+      const result = await pc.stopDaemonOnly();
+      ok('daemon', result.stopped ? 'stopped (stays off until start)' : 'still running');
+      if (result.killed.length) info('force-stopped', result.killed.join(', '));
+      return;
+    }
+    case 'daemon-restart': {
+      const result = pc.restartDaemonOnly();
+      ok('daemon', result.pid ? `restarted (pid ${result.pid})` : 'failed to start');
+      return;
+    }
+    case 'dashboard-start': {
+      const result = await pc.startDashboardOnly({ openBrowser: false });
+      ok('dashboard', result.up ? `http://127.0.0.1:${DASHBOARD_PORT}` : 'failed to start');
+      return;
+    }
+    case 'dashboard-stop': {
+      const result = await pc.stopDashboardOnly();
+      ok('dashboard', result.stopped ? 'stopped' : 'still running');
+      if (result.killed.length) info('force-stopped', result.killed.join(', '));
+      return;
+    }
+    case 'dashboard-status': {
+      const report = await pc.rpcReport();
+      ok('dashboard', report.dashboardUp ? `running (pid ${report.dashboardPid || 'unknown'})` : 'not running');
+      return;
+    }
+    default:
+      fail(`unknown process action: ${kind}`, { code: EX_USER_ERROR });
+  }
+}
+
 // ── dispatch ─────────────────────────────────────────────────────────────
 
 async function doComplete(argv) {
@@ -490,6 +589,15 @@ async function dispatch(argv) {
     ok('dashboard', `http://127.0.0.1:${port}`);
     console.log('');
     await import('./server/index.js');
+    return 0;
+  }
+  if (cmd === 'source') { await sourceCommand(args); return 0; }
+  if ([
+    'processes', 'start-all', 'stop-all', 'restart-all',
+    'daemon-start', 'daemon-stop', 'daemon-restart',
+    'dashboard-start', 'dashboard-stop', 'dashboard-status',
+  ].includes(cmd)) {
+    await processCommand(cmd);
     return 0;
   }
   if (cmd === 'model') { await modelCommand(args); return 0; }
