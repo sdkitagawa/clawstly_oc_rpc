@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { APP_NAME, modelLabelFor, normalizeMetric } from '../src/branding.js';
 import { DEFAULT_CONFIG } from '../src/default-config.js';
 import { buildVars, humanModel } from '../src/format.js';
@@ -9,6 +12,9 @@ import {
   isOurPluginEntry, readPluginsArray, replacePluginsArray, sourceStatus,
 } from '../src/plugin-source.js';
 import { classifyCommand } from '../src/process-control.js';
+import {
+  labelAt, normalizeEntries, readHistory, recordModelChange, seedHistory,
+} from '../src/display-model-history.js';
 import { statePathFor } from '../src/state.js';
 
 export async function run({ test, assert }) {
@@ -147,5 +153,38 @@ export async function run({ test, assert }) {
     assert.equal(classifyCommand('node "C:\\work\\bin\\clawstly-oc-rpc.js" serve'), 'dashboard');
     assert.equal(classifyCommand('node other-project.js'), null);
     assert.equal(classifyCommand('opencode.exe serve --service'), null);
+  });
+
+  test('display model history resolves the label active at each point in time', () => {
+    const entries = normalizeEntries([
+      { at: 2000, label: 'GPT Sol' },
+      { at: 1000, label: 'Claude Opus' },
+      { at: 3000, label: '' },
+      { at: 'bad', label: 'ignored' },
+    ]);
+    assert.deepEqual(entries.map((e) => e.at), [1000, 2000, 3000]);
+    assert.equal(labelAt(entries, 999), 'Claude Opus');
+    assert.equal(labelAt(entries, 1500), 'Claude Opus');
+    assert.equal(labelAt(entries, 2000), 'GPT Sol');
+    assert.equal(labelAt(entries, 2500), 'GPT Sol');
+    assert.equal(labelAt(entries, 3500), '');
+    assert.equal(labelAt(entries), '');
+    assert.equal(labelAt([], 1000), null);
+    assert.equal(normalizeEntries(Array.from({ length: 150 }, (_, i) => ({ at: i, label: 'x' }))).length, 100);
+  });
+
+  test('display model history round-trips from disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'clawstly-hist-test-'));
+    const path = join(dir, 'model-history.json');
+    try {
+      seedHistory('Claude Opus', path, 1000);
+      recordModelChange('GPT Sol', path, 2000);
+      const history = readHistory(path);
+      assert.equal(history.length, 2);
+      assert.equal(labelAt(history, 1500), 'Claude Opus');
+      assert.equal(labelAt(history, 2500), 'GPT Sol');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 }
