@@ -471,9 +471,12 @@ async function processCommand(kind) {
     }
     case 'stop-all': {
       const result = await pc.stopAll();
+      ok('plug-in', result.plugin.disabled ? 'disabled - OpenCode left running' : 'not disabled');
       ok('daemon', result.daemon.stopped ? 'stopped' : 'still running');
       ok('dashboard', result.dashboard.stopped ? 'stopped' : 'still running');
       if (result.killed.length) info('force-stopped', result.killed.join(', '));
+      if (result.stopped.leftovers) ok('leftovers', 'none');
+      else warn('leftovers still running', result.leftovers.map((proc) => `${proc.kind} ${proc.pid}`).join(', '));
       return;
     }
     case 'restart-all': {
