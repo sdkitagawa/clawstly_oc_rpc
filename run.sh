@@ -17,7 +17,7 @@ case "$UNAME_S" in
   MINGW*|MSYS*|CYGWIN*) WINDOWS_SHELL=1 ;;
   *) WINDOWS_SHELL=0 ;;
 esac
-# WSL reports Linux but has no native node — only cmd.exe + Windows node.exe.
+# WSL reports Linux but has no native node - only cmd.exe + Windows node.exe.
 # Treat that as a Windows-interop shell so paths and helpers are translated.
 if [ "$WINDOWS_SHELL" -eq 0 ] && ! command -v node >/dev/null 2>&1 \
    && command -v cmd.exe >/dev/null 2>&1; then
@@ -204,20 +204,20 @@ header() {
 main_menu() {
   header
   cat <<'EOF'
- 1   Start all - Daemon / Dashboard Server.
- 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.
- 3   Restart all.
- 4   Restart RPC only.
- 5   Plugin source.
- 6   Open dashboard.
- 7   Status.
- 8   Health check.
- 9   Change displayed model.
-10   Token / Cost display.
-11   Start RPC only (Daemon).
-12   Stop RPC only (Daemon).
-13   Start Dashboard -> Browser.
-14   Exit.
+ 1 -  Start all - Daemon / Dashboard Server.
+ 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.
+ 3 -  Restart all.
+ 4 -  Restart RPC only.
+ 5 -  Plugin source.
+ 6 -  Open dashboard.
+ 7 -  Status.
+ 8 -  Health check.
+ 9 -  Change displayed model.
+10 -  Token / Cost display.
+11 -  Start RPC only (Daemon).
+12 -  Stop RPC only (Daemon).
+13 -  Start Dashboard -> Browser.
+14 -  Exit.
 
 EOF
 }
@@ -227,15 +227,15 @@ source_menu() {
   echo "Which OpenCode plugin copy should be loaded?"
   echo
   if [ "$WINDOWS_SHELL" -eq 1 ]; then
-    echo " C   Local source (C: working copy)"
-    echo " D   Mirror (D: git copy)"
+    echo " C -  Local source (C: working copy)"
+    echo " D -  Mirror (D: git copy)"
   else
-    echo " L   Local source (this install)"
-    echo " M   Mirror path (CLAWSTLY_PLUGIN_MIRROR)"
+    echo " L -  Local source (this install)"
+    echo " M -  Mirror path (CLAWSTLY_PLUGIN_MIRROR)"
   fi
-  echo " P   Custom absolute path..."
-  echo " S   Show current registration"
-  echo " 0   Back"
+  echo " P -  Custom absolute path..."
+  echo " S -  Show current registration"
+  echo " 0 -  Back"
   echo
 }
 
@@ -244,16 +244,16 @@ model_menu() {
   cat <<'EOF'
 Displayed model on Discord
 
- 1  GPT Sol
- 2  GPT Luna
- 3  GPT Astra
- 4  Claude Opus
- 5  Claude Sonnet
- 6  Claude Haiku
- 7  Claude Fable
- 8  Real model (privacy off)
- 9  Custom label...
- 0  Back
+ 1 -  GPT Sol
+ 2 -  GPT Luna
+ 3 -  GPT Astra
+ 4 -  Claude Opus
+ 5 -  Claude Sonnet
+ 6 -  Claude Haiku
+ 7 -  Claude Fable
+ 8 -  Real model (privacy off)
+ 9 -  Custom label...
+ 0 -  Back
 
 EOF
 }
@@ -263,10 +263,10 @@ metric_menu() {
   cat <<'EOF'
 What should Discord show?
 
- 1  Tokens           -> 46.63M tokens
- 2  Estimated cost   -> ~$0.42
- 3  Both             -> 46.63M tokens, ~$0.42
- 0  Back
+ 1 -  Tokens           -> 46.63M tokens
+ 2 -  Estimated cost   -> ~$0.42
+ 3 -  Both             -> 46.63M tokens, ~$0.42
+ 0 -  Back
 
 EOF
 }
