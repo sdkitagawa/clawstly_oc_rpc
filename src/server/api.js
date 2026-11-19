@@ -7,6 +7,7 @@
 import { basename } from 'node:path';
 import { loadConfig } from '../config.js';
 import { readActiveState, listSessionStates } from '../state.js';
+import { labelAt, readHistory } from '../display-model-history.js';
 import * as scanner from '../scanner.js';
 import { buildVars, fillTemplate, applyIdle, framePasses, humanModel } from '../format.js';
 import { pickFrames, resolveLargeImageKey } from '../presence.js';
@@ -84,7 +85,7 @@ function renderTemplate(value, vars) {
 
 // One small Discord-card preview: the same frame set the daemon renders, with
 // the same variable substitution and gating. Large-image keys are shown as
-// text only — the local UI never loads remote Discord assets itself.
+// text only - the local UI never loads remote Discord assets itself.
 export function presencePreview(config, state, vars) {
   const p = config.presence || {};
   let frames = [];
@@ -181,8 +182,11 @@ export function aggregateSummary(agg = safeAggregate()) {
 export function sessionList() {
   const states = safeSessionStates();
   const live = safeLiveSessions();
+  const history = readHistory();
   const config = safeConfig();
-  const displayModel = typeof config.displayModel === 'string' ? config.displayModel.trim() : '';
+  // No history file yet: keep the previous behavior (current label) rather
+  // than suddenly showing real models for every existing row.
+  const currentLabel = typeof config.displayModel === 'string' ? config.displayModel.trim() : '';
   const liveByKey = new Map();
   for (const s of live) liveByKey.set(s.cwd || s.project, s);
 
@@ -190,12 +194,16 @@ export function sessionList() {
     const cwd = typeof s.cwd === 'string' ? s.cwd : '';
     const match = liveByKey.get(cwd);
     const input = number(s.tokens?.input) + number(s.tokens?.cacheRead) + number(s.tokens?.cacheWrite);
+    // Resolve the label that was active when this session was last seen. The
+    // global config only describes NOW, so applying it here would relabel every
+    // historical row whenever the user switches display profiles.
+    const shownLabel = labelAt(history, number(s.lastActivity)) ?? currentLabel;
     return {
       sessionId: s.sessionId || '',
       project: basename(cwd) || s.project || 'OpenCode',
       cwd,
       status: s.status || 'idle',
-      model: displayModel || humanModel(s.model) || s.model || '',
+      model: shownLabel || humanModel(s.model) || s.model || '',
       lastActivity: number(s.lastActivity),
       tokens: input + number(s.tokens?.output),
       live: !!match,
@@ -224,7 +232,7 @@ export function sessionList() {
   return rows.sort((a, b) => b.lastActivity - a.lastActivity).slice(0, 40);
 }
 
-// GET /api/state — everything the dashboard needs for one first paint.
+// GET /api/state - everything the dashboard needs for one first paint.
 export function snapshot() {
   const config = safeConfig();
   const state = safeState();
