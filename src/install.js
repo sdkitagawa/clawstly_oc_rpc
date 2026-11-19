@@ -21,6 +21,7 @@ import {
   VERSION_STAMP,
 } from './paths.js';
 import { writeFileAtomic } from './atomic-rename.js';
+import { isOurPluginEntry, sourceStatus } from './plugin-source.js';
 import { APP_NAME, DEFAULT_DISPLAY_MODEL } from './branding.js';
 import { c, SYM_OK, SYM_WARN, SYM_INFO, hintLine } from './ui.js';
 import { VERSION } from './version.js';
@@ -161,26 +162,23 @@ function isPathLike(value) {
   return typeof value === 'string' && /[\\/]/.test(value);
 }
 
-// A registration that points at this install (the script path counts as "ours"
-// but is stale — setup must fix it to the directory).
-function isOurPluginValue(entry) {
-  const value = pluginValue(entry);
-  if (!isPathLike(value)) return false;
-  const p = normPath(value);
-  return p === normPath(PLUGIN_DIR) || p === normPath(PLUGIN_SCRIPT);
+// Any Clawstly copy counts as ours: the selected plugin source (option 5) is canonical.
+function isClawstlyPluginsValue(entry) {
+  return isOurPluginEntry(entry);
 }
 
 function isCurrentPluginValue(entry) {
   const value = pluginValue(entry);
   if (!isPathLike(value) || !isAbsolute(value)) return false;
-  return normPath(value) === normPath(PLUGIN_DIR);
+  const active = sourceStatus().activeTarget || resolve(PLUGIN_DIR);
+  return normPath(value) === normPath(active);
 }
 
 function pluginEntryIn(config) {
   const plugins = config?.plugins;
   if (!plugins) return { found: false, current: false, entry: null, shape: null };
   if (Array.isArray(plugins)) {
-    const index = plugins.findIndex(isOurPluginValue);
+    const index = plugins.findIndex(isClawstlyPluginsValue);
     return index === -1
       ? { found: false, current: false, entry: null, shape: 'array' }
       : { found: true, current: isCurrentPluginValue(plugins[index]), entry: plugins[index], shape: 'array', index };
@@ -191,7 +189,7 @@ function pluginEntryIn(config) {
       return { found: true, current: isCurrentPluginValue(plugins[PLUGIN_KEY]), entry: plugins[PLUGIN_KEY], shape: 'object', key: PLUGIN_KEY };
     }
     for (const [key, value] of Object.entries(plugins)) {
-      if (isOurPluginValue(value)) {
+      if (isClawstlyPluginsValue(value)) {
         return { found: true, current: isCurrentPluginValue(value), entry: value, shape: 'object', key };
       }
     }
@@ -244,8 +242,8 @@ export function pluginStatus() {
 export function isOurHook(target) {
   if (target === undefined || target === null) return pluginStatus().found;
   if (typeof target !== 'object') return false;
-  if (Array.isArray(target)) return target.some(isOurPluginValue);
-  if (pluginValue(target) || typeof target.package === 'string') return isOurPluginValue(target);
+  if (Array.isArray(target)) return target.some(isClawstlyPluginsValue);
+  if (pluginValue(target) || typeof target.package === 'string') return isClawstlyPluginsValue(target);
   return pluginEntryIn(target).found;
 }
 
@@ -294,7 +292,7 @@ function ensurePluginRegistration({ silent = false } = {}) {
   }
 
   const ownIndices = plugins
-    .map((entry, index) => (isOurPluginValue(entry) ? index : -1))
+    .map((entry, index) => (isClawstlyPluginsValue(entry) ? index : -1))
     .filter((index) => index >= 0);
   if (ownIndices.length) {
     plugins[ownIndices[0]] = target;
