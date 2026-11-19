@@ -475,6 +475,12 @@ export default Plugin.define({
         s.daemonScript = text(DAEMON_SCRIPT) ?? null;
         s.startupResumed = hadState;
         s.lastStartup = Date.now();
+        // The global state.json is the daemon's fallback when no per-session
+        // file exists yet. touch() only sets sessionStart when missing, so a
+        // preserved state file would otherwise anchor Discord's elapsed timer
+        // to a previous OpenCode run (hours/days ago). Per-session files keep
+        // their own accurate sessionStart; only this fallback is re-anchored.
+        s.sessionStart = s.lastStartup;
         return s;
       });
     } catch { /* setup must never break OpenCode */ }
