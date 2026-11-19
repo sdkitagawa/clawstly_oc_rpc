@@ -1,4 +1,4 @@
-# Clawstly — easy RPC control.
+# Clawstly - easy RPC control.
 # Double-click run.cmd / run.bat, or run: powershell -File run.ps1
 
 $ErrorActionPreference = 'Stop'
@@ -69,17 +69,35 @@ function Get-DaemonPid {
   return $pidText
 }
 
+function Get-SourceLabel {
+  try {
+    $value = (& $Node $Cli source status --short 2>$null | Out-String).Trim()
+    if ($value) { return $value }
+  } catch { }
+  return 'none'
+}
+
+function Test-Dashboard {
+  try {
+    $res = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$DashboardPort/api/settings" -TimeoutSec 2 -ErrorAction Stop
+    return $res.StatusCode -eq 200
+  } catch { return $false }
+}
+
 function Show-Header {
   param([switch]$Clear)
   if ($Clear) { try { Clear-Host } catch { } }
   $cfg = Get-RpcConfig
   $pidText = Get-DaemonPid
   if (-not $pidText) { $pidText = 'stopped' }
+  $dash = if (Test-Dashboard) { "listening ($DashboardPort)" } else { 'stopped' }
+  $source = Get-SourceLabel
+  if ($source.Length -gt 52) { $source = '...' + $source.Substring($source.Length - 49) }
   $model = if ($cfg.displayModel) { $cfg.displayModel } else { 'real model' }
   $app = if ($cfg.appName) { $cfg.appName } else { $AppName }
 
   $label = "$AppName - RPC control"
-  $inner = 48
+  $inner = 60
   $pad = [Math]::Max(0, $inner - $label.Length)
   $left = [int][Math]::Ceiling($pad / 2.0)
   $right = $pad - $left
@@ -87,10 +105,12 @@ function Show-Header {
   Write-Host ('|' + (' ' * $left) + $label + (' ' * $right) + '|') -ForegroundColor Cyan
   Write-Host ('+' + ('-' * $inner) + '+') -ForegroundColor DarkCyan
   Write-Host ''
-  Write-Host (" Daemon : {0}" -f $pidText)
-  Write-Host (" App    : {0}" -f $app)
-  Write-Host (" Model  : {0}" -f $model)
-  Write-Host (" Metric : {0}" -f $cfg.displayMetric)
+  Write-Host (" Daemon    : {0}" -f $pidText)
+  Write-Host (" Dashboard : {0}" -f $dash)
+  Write-Host (" Source    : {0}" -f $source)
+  Write-Host (" App       : {0}" -f $app)
+  Write-Host (" Model     : {0}" -f $model)
+  Write-Host (" Metric    : {0}" -f $cfg.displayMetric)
   Write-Host ''
 }
 
@@ -104,15 +124,32 @@ function Wait-ForUser {
 
 function Show-MainMenu {
   Show-Header -Clear
-  Write-Host ' 1  Start RPC'
-  Write-Host ' 2  Stop RPC'
-  Write-Host ' 3  Restart RPC'
-  Write-Host ' 4  Status'
-  Write-Host ' 5  Health check'
-  Write-Host ' 6  Open dashboard'
-  Write-Host ' 7  Change displayed model'
-  Write-Host ' 8  Token / cost display'
-  Write-Host ' 9  Exit'
+  Write-Host ' 1   Start all - Daemon / Dashboard Server.'
+  Write-Host ' 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.'
+  Write-Host ' 3   Restart all.'
+  Write-Host ' 4   Restart RPC only.'
+  Write-Host ' 5   Plugin source.'
+  Write-Host ' 6   Open dashboard.'
+  Write-Host ' 7   Status.'
+  Write-Host ' 8   Health check.'
+  Write-Host ' 9   Change displayed model.'
+  Write-Host '10   Token / Cost display.'
+  Write-Host '11   Start RPC only (Daemon).'
+  Write-Host '12   Stop RPC only (Daemon).'
+  Write-Host '13   Start Dashboard -> Browser.'
+  Write-Host '14   Exit.'
+  Write-Host ''
+}
+
+function Show-SourceMenu {
+  Show-Header -Clear
+  Write-Host 'Which OpenCode plugin copy should be loaded?'
+  Write-Host ''
+  Write-Host ' C   Local source (C: working copy)'
+  Write-Host ' D   Mirror (D: git copy)'
+  Write-Host ' P   Custom absolute path...'
+  Write-Host ' S   Show current registration'
+  Write-Host ' 0   Back'
   Write-Host ''
 }
 
@@ -144,39 +181,32 @@ function Show-MetricMenu {
   Write-Host ''
 }
 
-function Test-Dashboard {
-  try {
-    $res = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$DashboardPort/api/settings" -TimeoutSec 2 -ErrorAction Stop
-    return $res.StatusCode -eq 200
-  } catch { return $false }
-}
-
-function Start-Dashboard {
+function Open-Dashboard {
+  Invoke-Rpc @('dashboard-start')
   $url = "http://127.0.0.1:$DashboardPort"
-  if (-not (Test-Dashboard)) {
-    $old = $env:CLAWSTLY_RPC_NO_OPEN
-    $env:CLAWSTLY_RPC_NO_OPEN = '1'
-    try {
-      # Start-Process joins ArgumentList with spaces. The CLI path has spaces
-      # (C:\Users\Douglas Kitagawa\...), so it must be quoted or Node exits.
-      $quotedCli = '"' + $Cli + '"'
-      Start-Process -FilePath $Node -ArgumentList @($quotedCli, 'serve') -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
-    } finally {
-      if ($null -eq $old) { Remove-Item Env:CLAWSTLY_RPC_NO_OPEN -ErrorAction SilentlyContinue }
-      else { $env:CLAWSTLY_RPC_NO_OPEN = $old }
-    }
-    for ($i = 0; $i -lt 20; $i++) {
-      if (Test-Dashboard) { break }
-      Start-Sleep -Milliseconds 250
-    }
-  }
-
   if (Test-Dashboard) {
     Start-Process $url | Out-Null
     Write-Host "Dashboard: $url" -ForegroundColor Green
   } else {
     Write-Host "Dashboard did not start on $url" -ForegroundColor Red
     Write-Host "Start it manually with: node bin\clawstly-oc-rpc.js serve" -ForegroundColor Yellow
+  }
+}
+
+function Invoke-SourceChoice {
+  Show-SourceMenu
+  $choice = (Read-Host 'Choice').Trim().ToUpperInvariant()
+  switch ($choice) {
+    'C' { Invoke-Rpc @('source', 'C'); Wait-ForUser }
+    'D' { Invoke-Rpc @('source', 'D'); Wait-ForUser }
+    'S' { Invoke-Rpc @('source', 'status'); Wait-ForUser }
+    'P' {
+      $path = Read-Host 'Absolute plugin directory'
+      if ($path.Trim()) { Invoke-Rpc @('source', $path.Trim()) }
+      Wait-ForUser
+    }
+    '0' { }
+    default { Write-Host 'Unknown choice.' -ForegroundColor Yellow; Wait-ForUser }
   }
 }
 
@@ -226,17 +256,25 @@ if ($args.Count -gt 0) {
   $action = $args[0].ToLowerInvariant()
   $rest = @($args | Select-Object -Skip 1)
   switch ($action) {
-    'start'   { Invoke-Rpc @('start'); exit $RpcExitCode }
-    'stop'    { Invoke-Rpc @('stop'); exit $RpcExitCode }
-    'restart' { Invoke-Rpc @('restart'); exit $RpcExitCode }
-    'status'  { Invoke-Rpc @('status'); exit $RpcExitCode }
-    'doctor'  { Invoke-Rpc @('doctor'); exit $RpcExitCode }
-    'dashboard' { Start-Dashboard; exit 0 }
-    'model'   { Invoke-Rpc (@('model') + $rest); exit $RpcExitCode }
-    'metric'  { Invoke-Rpc (@('metric') + $rest); exit $RpcExitCode }
+    'start-all'     { Invoke-Rpc @('start-all'); exit $RpcExitCode }
+    'stop-all'      { Invoke-Rpc @('stop-all'); exit $RpcExitCode }
+    'restart-all'   { Invoke-Rpc @('restart-all'); exit $RpcExitCode }
+    'restart-rpc'   { Invoke-Rpc @('restart'); exit $RpcExitCode }
+    'start'         { Invoke-Rpc @('start'); exit $RpcExitCode }
+    'stop'          { Invoke-Rpc @('stop'); exit $RpcExitCode }
+    'restart'       { Invoke-Rpc @('restart'); exit $RpcExitCode }
+    'source'        { Invoke-Rpc (@('source') + $rest); exit $RpcExitCode }
+    'status'        { Invoke-Rpc @('status'); exit $RpcExitCode }
+    'doctor'        { Invoke-Rpc @('doctor'); exit $RpcExitCode }
+    'dashboard'     { Open-Dashboard; exit 0 }
+    'dashboard-start' { Invoke-Rpc @('dashboard-start'); exit $RpcExitCode }
+    'dashboard-stop'  { Invoke-Rpc @('dashboard-stop'); exit $RpcExitCode }
+    'dashboard-status' { Invoke-Rpc @('dashboard-status'); exit $RpcExitCode }
+    'model'         { Invoke-Rpc (@('model') + $rest); exit $RpcExitCode }
+    'metric'        { Invoke-Rpc (@('metric') + $rest); exit $RpcExitCode }
     default {
       Write-Host "Unknown action: $action" -ForegroundColor Red
-      Write-Host 'start | stop | restart | status | doctor | dashboard | model | metric'
+      Write-Host 'start-all | stop-all | restart-all | restart-rpc | start | stop | source | dashboard | dashboard-start | dashboard-stop | dashboard-status | status | doctor | model | metric'
       exit 1
     }
   }
@@ -244,17 +282,22 @@ if ($args.Count -gt 0) {
 
 while ($true) {
   Show-MainMenu
-  $choice = Read-Host 'Choice'
+  $choice = (Read-Host 'Choice').Trim()
   switch ($choice) {
-    '1' { Invoke-Rpc @('start'); Wait-ForUser }
-    '2' { Invoke-Rpc @('stop'); Wait-ForUser }
-    '3' { Invoke-Rpc @('restart'); Wait-ForUser }
-    '4' { Invoke-Rpc @('status'); Wait-ForUser }
-    '5' { Invoke-Rpc @('doctor'); Wait-ForUser }
-    '6' { Start-Dashboard; Wait-ForUser }
-    '7' { Invoke-ModelChoice }
-    '8' { Invoke-MetricChoice }
-    '9' { exit 0 }
+    '1'  { Invoke-Rpc @('start-all'); Wait-ForUser }
+    '2'  { Invoke-Rpc @('stop-all'); Wait-ForUser }
+    '3'  { Invoke-Rpc @('restart-all'); Wait-ForUser }
+    '4'  { Invoke-Rpc @('restart'); Wait-ForUser }
+    '5'  { Invoke-SourceChoice }
+    '6'  { Open-Dashboard; Wait-ForUser }
+    '7'  { Invoke-Rpc @('status'); Wait-ForUser }
+    '8'  { Invoke-Rpc @('doctor'); Wait-ForUser }
+    '9'  { Invoke-ModelChoice }
+    '10' { Invoke-MetricChoice }
+    '11' { Invoke-Rpc @('start'); Wait-ForUser }
+    '12' { Invoke-Rpc @('stop'); Wait-ForUser }
+    '13' { Open-Dashboard; Wait-ForUser }
+    '14' { exit 0 }
     default { Write-Host 'Unknown choice.' -ForegroundColor Yellow; Wait-ForUser }
   }
 }
