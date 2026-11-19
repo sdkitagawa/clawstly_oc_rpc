@@ -124,20 +124,20 @@ function Wait-ForUser {
 
 function Show-MainMenu {
   Show-Header -Clear
-  Write-Host ' 1   Start all - Daemon / Dashboard Server.'
-  Write-Host ' 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.'
-  Write-Host ' 3   Restart all.'
-  Write-Host ' 4   Restart RPC only.'
-  Write-Host ' 5   Plugin source.'
-  Write-Host ' 6   Open dashboard.'
-  Write-Host ' 7   Status.'
-  Write-Host ' 8   Health check.'
-  Write-Host ' 9   Change displayed model.'
-  Write-Host '10   Token / Cost display.'
-  Write-Host '11   Start RPC only (Daemon).'
-  Write-Host '12   Stop RPC only (Daemon).'
-  Write-Host '13   Start Dashboard -> Browser.'
-  Write-Host '14   Exit.'
+  Write-Host ' 1 -  Start all - Daemon / Dashboard Server.'
+  Write-Host ' 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.'
+  Write-Host ' 3 -  Restart all.'
+  Write-Host ' 4 -  Restart RPC only.'
+  Write-Host ' 5 -  Plugin source.'
+  Write-Host ' 6 -  Open dashboard.'
+  Write-Host ' 7 -  Status.'
+  Write-Host ' 8 -  Health check.'
+  Write-Host ' 9 -  Change displayed model.'
+  Write-Host '10 -  Token / Cost display.'
+  Write-Host '11 -  Start RPC only (Daemon).'
+  Write-Host '12 -  Stop RPC only (Daemon).'
+  Write-Host '13 -  Start Dashboard -> Browser.'
+  Write-Host '14 -  Exit.'
   Write-Host ''
 }
 
@@ -145,11 +145,11 @@ function Show-SourceMenu {
   Show-Header -Clear
   Write-Host 'Which OpenCode plugin copy should be loaded?'
   Write-Host ''
-  Write-Host ' C   Local source (C: working copy)'
-  Write-Host ' D   Mirror (D: git copy)'
-  Write-Host ' P   Custom absolute path...'
-  Write-Host ' S   Show current registration'
-  Write-Host ' 0   Back'
+  Write-Host ' C -  Local source (C: working copy)'
+  Write-Host ' D -  Mirror (D: git copy)'
+  Write-Host ' P -  Custom absolute path...'
+  Write-Host ' S -  Show current registration'
+  Write-Host ' 0 -  Back'
   Write-Host ''
 }
 
@@ -157,16 +157,16 @@ function Show-ModelMenu {
   Show-Header -Clear
   Write-Host 'Displayed model on Discord'
   Write-Host ''
-  Write-Host ' 1  GPT Sol'
-  Write-Host ' 2  GPT Luna'
-  Write-Host ' 3  GPT Astra'
-  Write-Host ' 4  Claude Opus'
-  Write-Host ' 5  Claude Sonnet'
-  Write-Host ' 6  Claude Haiku'
-  Write-Host ' 7  Claude Fable'
-  Write-Host ' 8  Real model (privacy off)'
-  Write-Host ' 9  Custom label...'
-  Write-Host ' 0  Back'
+  Write-Host ' 1 -  GPT Sol'
+  Write-Host ' 2 -  GPT Luna'
+  Write-Host ' 3 -  GPT Astra'
+  Write-Host ' 4 -  Claude Opus'
+  Write-Host ' 5 -  Claude Sonnet'
+  Write-Host ' 6 -  Claude Haiku'
+  Write-Host ' 7 -  Claude Fable'
+  Write-Host ' 8 -  Real model (privacy off)'
+  Write-Host ' 9 -  Custom label...'
+  Write-Host ' 0 -  Back'
   Write-Host ''
 }
 
@@ -174,10 +174,10 @@ function Show-MetricMenu {
   Show-Header -Clear
   Write-Host 'What should Discord show?'
   Write-Host ''
-  Write-Host ' 1  Tokens           -> 46.63M tokens'
-  Write-Host ' 2  Estimated cost   -> ~$0.42'
-  Write-Host ' 3  Both             -> 46.63M tokens, ~$0.42'
-  Write-Host ' 0  Back'
+  Write-Host ' 1 -  Tokens           -> 46.63M tokens'
+  Write-Host ' 2 -  Estimated cost   -> ~$0.42'
+  Write-Host ' 3 -  Both             -> 46.63M tokens, ~$0.42'
+  Write-Host ' 0 -  Back'
   Write-Host ''
 }
 
