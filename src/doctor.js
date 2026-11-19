@@ -15,6 +15,7 @@ import {
   OPENCODE_CONFIG_DIR,
 } from './paths.js';
 import { loadConfig } from './config.js';
+import { pluginRegistrationIssues, sourceStatus } from './plugin-source.js';
 import { readActiveState, listSessionStates } from './state.js';
 import { readAggregate, findLiveSessions } from './scanner.js';
 import { daemonAlive, isStopped, readDaemonInfo, BEAT_STALE_MS } from './ensure-daemon.js';
@@ -112,7 +113,8 @@ function checkPlugin() {
     return;
   }
   if (status.current) {
-    check(`${hookWord()} registered`, 'pass', `${PLUGIN_KEY} → ${shortPath(status.pluginPath)}`);
+    const active = sourceStatus().activeTarget || status.pluginPath;
+    check(`${hookWord()} registered`, 'pass', `${PLUGIN_KEY} → ${shortPath(active)}`);
     return;
   }
   if (status.found) {
@@ -125,6 +127,22 @@ function checkPlugin() {
     `add ${pluginSnippet().replace(/\n\s*/g, ' ')} to ${shortPath(`${OPENCODE_CONFIG_DIR}/opencode.jsonc`)} (or run setup)`);
   if (EVENTS.length) {
     check(`${hookWord()} events`, 'info', `${EVENTS.length} OpenCode V2 events are understood by this build`);
+  }
+}
+
+function checkPluginRegistrations() {
+  let issues;
+  try {
+    issues = pluginRegistrationIssues();
+  } catch (error) {
+    check('plugin registrations', 'warn', `lookup failed: ${error?.message || error}`);
+    return;
+  }
+  if (issues.length) {
+    check('plugin registrations', 'fail', issues.join('; '),
+      'run `clawstly-oc-rpc source D` (or your active source) to consolidate registrations');
+  } else {
+    check('plugin registrations', 'pass', 'single registration');
   }
 }
 
@@ -308,6 +326,7 @@ export async function doctor() {
 
   section('OpenCode');
   checkPlugin();
+  checkPluginRegistrations();
   await checkOpenCodeProcess();
   checkSessionState();
 
