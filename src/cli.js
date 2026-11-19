@@ -177,12 +177,12 @@ async function showStatus() {
   console.log('');
   ok('daemon', pid ? `running (pid ${pid})` : 'not running');
   if (existsSync(CONFIG_PATH)) ok('config', shortPath(CONFIG_PATH));
-  else warn('config', `missing — run \`${CLI} setup\``);
+  else warn('config', `missing - run \`${CLI} setup\``);
   ok('state dir', shortPath(STATE_DIR));
   ok('session', `${vars.statusVerbose || vars.status} · ${vars.project} · ${vars.modelPretty}`);
   ok('live sessions', String(live.length));
   if (agg) ok('aggregate', aggregateSummary(agg));
-  else warn('aggregate', `not built yet — run \`${CLI} scan\``);
+  else warn('aggregate', `not built yet - run \`${CLI} scan\``);
   if (ctl.isStopped()) info('paused by stop', `use \`${CLI} start\` to resume`);
   console.log('');
 }
@@ -359,6 +359,7 @@ async function pauseCommand(argv) {
 
 async function modelCommand(argv) {
   const { loadConfig } = await import('./config.js');
+  const { seedHistory, recordModelChange } = await import('./display-model-history.js');
   const current = String(loadConfig().displayModel || '').trim();
   const input = argv.join(' ').trim();
 
@@ -378,7 +379,11 @@ async function modelCommand(argv) {
   }
 
   const resolved = modelLabelFor(input);
+  // Seed the outgoing label at the config file's current mtime BEFORE writing
+  // the new one, so dashboard rows from earlier keep their original label.
+  seedHistory(current);
   await updateConfigKey('displayModel', resolved.label);
+  recordModelChange(resolved.label);
   ok('displayed model', resolved.label || 'real model');
   await restartDaemon(await daemonControl());
   info('discord card', `now showing ${resolved.label || 'the real model'}`);
@@ -445,7 +450,7 @@ async function sourceCommand(argv) {
   // plugin starts its own daemon from the selected source.
   const pc = await import('./process-control.js');
   await pc.stopDaemonOnly();
-  info('daemon', 'stopped — restart OpenCode to load the new source');
+  info('daemon', 'stopped - restart OpenCode to load the new source');
 }
 
 async function processCommand(kind) {
@@ -551,7 +556,7 @@ async function dispatch(argv) {
   }
   if (cmd === '__complete') { await doComplete(args); return 0; }
   if (cmd === 'hook') {
-    info('no hook needed', `${BRAND} uses an OpenCode V2 plugin instead — run \`${CLI} setup\` to register it`);
+    info('no hook needed', `${BRAND} uses an OpenCode V2 plugin instead - run \`${CLI} setup\` to register it`);
     return 0;
   }
   if (cmd === 'setup' || cmd === 'install') {
