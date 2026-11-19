@@ -432,6 +432,9 @@ async function sourceCommand(argv) {
       info(`preset ${key}`, path || 'not available on this platform');
     }
     if (st.systemDirs.length) info('system dirs (read-only)', st.systemDirs.join(', '));
+    const issues = src.pluginRegistrationIssues(st);
+    if (issues.length) warn('duplicate registration', issues.join('; '),
+      'run `clawstly-oc-rpc source D` (or your active source) to consolidate');
     console.log('');
     return;
   }
@@ -445,6 +448,7 @@ async function sourceCommand(argv) {
   }
   if (result.changed) ok('plugin source', result.target);
   else info('plugin source', `${result.target} (already set)`);
+  if (result.cleaned?.length > 1) info('registrations consolidated', result.cleaned.map(shortPath).join(', '));
   ok('config', shortPath(result.path));
   // The running daemon belongs to the old copy. Stop it so the newly loaded
   // plugin starts its own daemon from the selected source.
