@@ -84,33 +84,135 @@ node bin/clawstly-oc-rpc.js restart
 
 Four launchers are included so you never have to type a command:
 
-- `run.cmd` / `run.bat` — double-click on Windows
-- `run.ps1` — PowerShell directly
-- `run.sh` — Git Bash / WSL
+| File | Platform | How to run |
+| --- | --- | --- |
+| `run.cmd` | Windows | Double-click, or `run.cmd <action>` |
+| `run.bat` | Windows | Double-click, or `run.bat <action>` |
+| `run.ps1` | Windows | `powershell -File run.ps1 <action>` |
+| `run.sh` | Git Bash / WSL / macOS / Linux | `./run.sh <action>` |
 
-With no arguments they open a menu:
+`run.cmd` and `run.bat` are thin wrappers around `run.ps1`, so all three Windows
+launchers share the same behavior. Requirements: Node 18+ on `PATH`, and the
+project folder in place. No build step is needed.
+
+With no arguments they open this menu (identical in all four launchers):
 
 ```text
-1  Start RPC
-2  Stop RPC
-3  Restart RPC
-4  Status
-5  Health check
-6  Open dashboard
-7  Change displayed model
-8  Token / cost display
-9  Exit
+ 1   Start all - Daemon / Dashboard Server.
+ 2   Stop all - Clean-stop Daemon, Force-stop leftover processes.
+ 3   Restart all.
+ 4   Restart RPC only.
+ 5   Plugin source.
+ 6   Open dashboard.
+ 7   Status.
+ 8   Health check.
+ 9   Change displayed model.
+10   Token / Cost display.
+11   Start RPC only (Daemon).
+12   Stop RPC only (Daemon).
+13   Start Dashboard -> Browser.
+14   Exit.
 ```
 
-Direct forms also work, for example `run.cmd model sol`, `run.cmd metric cost`, or `./run.sh stop`.
+What the start/stop options actually control:
+
+- **Daemon** = the `node … src/daemon.js` process that pushes Discord Rich Presence.
+- **Dashboard / Node server** = the `node … clawstly-oc-rpc.js serve` process on
+  `http://127.0.0.1:47474`. The browser page and Node server are the same thing;
+  there is no third component.
+- **1 Start all** starts the daemon **and** the dashboard server. It does **not**
+  open a browser — use option 13 for that.
+- **2 Stop all** clean-stops the daemon (writing the no-respawn marker), stops
+  the dashboard server, then force-stops any leftover Node process whose command
+  line still runs our daemon or server script. Other Node processes and OpenCode
+  itself are never touched.
+- **3 Restart all** = stop all, then start all.
+- **4 Restart RPC only** restarts just the daemon.
+- **6 Open dashboard** ensures the server is up, then opens the browser.
+- **11 / 12** start or stop only the daemon (headless Discord presence).
+- **13 Start Dashboard → Browser** starts the server and opens the dashboard.
+
+Direct arguments skip the menu. All launchers accept:
+
+```bash
+run.cmd start-all          # daemon + dashboard server, no browser
+run.cmd stop-all           # daemon + server + leftover sweep
+run.cmd restart-all
+run.cmd restart-rpc        # daemon only
+run.cmd start              # daemon only
+run.cmd stop               # daemon only
+run.cmd source status      # show the active registration
+run.cmd source C           # use the local C: source plugin
+run.cmd source D           # use the D: mirror plugin
+run.cmd source "<abs path>"# use any absolute plugin directory
+run.cmd dashboard          # start server + open browser
+run.cmd dashboard-start    # server only, no browser
+run.cmd dashboard-stop
+run.cmd status
+run.cmd doctor
+run.cmd model sol          # or luna | astra | opus | sonnet | haiku | fable | real
+run.cmd metric cost        # or tokens | both
+```
+
+`./run.sh` accepts the same arguments and is fully independent of PowerShell:
+it uses the POSIX script path and `curl`/`wget` / `xdg-open`, and only touches
+`cygpath`, `netstat` or `cmd.exe` when running under Git Bash/MSYS on Windows.
+On macOS/Linux the source shortcuts are `L` (this install's own `plugin/`
+directory) and `M` (an optional mirror); `C`/`D` remain accepted aliases.
+Override the presets with `CLAWSTLY_PLUGIN_SOURCE` / `CLAWSTLY_PLUGIN_MIRROR`.
+
+## Plugin registration / source selection
+
+OpenCode V2 loads plugins from its own `opencode.json(c)` — not from a command
+hook. The plugin is a directory entry, and it must appear **exactly once**;
+registering both copies produces `Duplicate plugin ID: clawstly-oc-rpc` in
+`/plugins`.
+
+OpenCode looks for the user config in these locations. The launcher checks each
+one (and project-local configs) and edits the file that currently registers the
+plugin, or the global user config if none does:
+
+| Platform | Global user config | System-managed (read-only) |
+| --- | --- | --- |
+| Windows | `%USERPROFILE%\.config\opencode\opencode.jsonc` | `%ProgramData%\opencode\` |
+| macOS | `~/.config/opencode/opencode.jsonc` | `/Library/Application Support/opencode/` |
+| Linux | `~/.config/opencode/opencode.jsonc` (or `$XDG_CONFIG_HOME/opencode/`) | `/etc/opencode/` |
+
+Full resolution order: `OPENCODE_CONFIG` → `$XDG_CONFIG_HOME/opencode` →
+`~/.config/opencode` → `%APPDATA%\opencode` (Windows fallback) → project-local
+`opencode.json(c)` / `.opencode/opencode.json(c)`. System directories are
+detected but never rewritten. Only the `plugins` array is replaced, so comments
+and every other setting survive. Paths use the host OS's separators.
+
+Use **menu option 5** or the CLI:
+
+```bash
+node bin/clawstly-oc-rpc.js source status          # active source + config path
+node bin/clawstly-oc-rpc.js source C               # local source copy (Windows)
+node bin/clawstly-oc-rpc.js source D               # D: git mirror (Windows)
+node bin/clawstly-oc-rpc.js source L               # local source copy (macOS/Linux)
+node bin/clawstly-oc-rpc.js source M               # mirror (macOS/Linux)
+node bin/clawstly-oc-rpc.js source /opt/clawstly/plugin  # custom absolute path
+```
+
+Switching the source clean-stops the current daemon so the newly loaded plugin
+copy spawns its own. **Restart OpenCode after switching** so it reloads the
+config; the existing OpenCode process keeps running until then.
 
 ## Commands
 
 ```bash
 node bin/clawstly-oc-rpc.js setup [--yes] [--print-plugin]
+node bin/clawstly-oc-rpc.js source [status|C|D|<absolute path>]
+node bin/clawstly-oc-rpc.js start-all
+node bin/clawstly-oc-rpc.js stop-all
+node bin/clawstly-oc-rpc.js restart-all
 node bin/clawstly-oc-rpc.js start
 node bin/clawstly-oc-rpc.js stop
 node bin/clawstly-oc-rpc.js restart
+node bin/clawstly-oc-rpc.js daemon-start | daemon-stop | daemon-restart
+node bin/clawstly-oc-rpc.js dashboard-start | dashboard-stop | dashboard-status
+node bin/clawstly-oc-rpc.js processes
 node bin/clawstly-oc-rpc.js status
 node bin/clawstly-oc-rpc.js doctor
 node bin/clawstly-oc-rpc.js serve [--port 47474]
