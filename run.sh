@@ -232,7 +232,7 @@ main_menu() {
   header
   cat <<'EOF'
  1 -  Start all - Daemon / Dashboard Server.
- 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.
+ 2 -  Stop all - Disable Plug-In, Stop Daemon/Dashboard, Force-stop leftovers.
  3 -  Restart all.
  4 -  Restart RPC only.
  5 -  Plugin source.
