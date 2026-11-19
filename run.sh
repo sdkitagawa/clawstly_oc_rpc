@@ -110,6 +110,33 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 fi
 
+# The source selected in menu option 5 is canonical: follow whichever install
+# OpenCode registers as the plugin source so both launchers read/write the same
+# config.json and model history instead of each copy keeping its own stale
+# displayModel. Fall back to this copy when no registration can be read.
+local_script="$NODE_SCRIPT"
+registered="$("${NODE[@]}" "$local_script" source status --short 2>/dev/null | tr -d '\r')"
+if [ -n "$registered" ] && [ "$registered" != 'none' ]; then
+  registered="$(to_posix_path "$registered")"
+  if [ -d "$registered" ]; then
+    candidate_root="$(dirname -- "$registered")"
+    candidate_cli="$candidate_root/bin/clawstly-oc-rpc.js"
+    if [ -f "$candidate_cli" ]; then
+      ROOT="$candidate_root"
+      CLI="$candidate_cli"
+      if [ "$WINDOWS_SHELL" -eq 1 ]; then
+        if command -v cygpath >/dev/null 2>&1; then
+          NODE_SCRIPT="$(cygpath -w "$CLI")"
+        else
+          NODE_SCRIPT="$(to_win_path "$CLI")"
+        fi
+      else
+        NODE_SCRIPT="$CLI"
+      fi
+    fi
+  fi
+fi
+
 rpc() {
   (cd "$ROOT" && "${NODE[@]}" "$NODE_SCRIPT" "$@")
 }
