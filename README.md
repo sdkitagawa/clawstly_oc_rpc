@@ -76,7 +76,7 @@ With no arguments they open this menu (identical in all four launchers):
 
 ```text
  1 -  Start all - Daemon / Dashboard Server.
- 2 -  Stop all - Clean-stop Daemon, Force-stop leftover Daemon/Server Node processes.
+ 2 -  Stop all - Disable Plug-In, Stop Daemon/Dashboard, Force-stop leftovers.
  3 -  Restart all.
  4 -  Restart RPC only.
  5 -  Plugin source.
@@ -99,10 +99,11 @@ What the start/stop options actually control:
   there is no third component.
 - **1 Start all** starts the daemon **and** the dashboard server. It does **not**
   open a browser - use option 13 for that.
-- **2 Stop all** clean-stops the daemon (writing the no-respawn marker), stops
-  the dashboard server, then force-stops any leftover Node process whose command
-  line still runs our daemon or server script. Other Node processes and OpenCode
-  itself are never touched.
+- **2 Stop all** writes the no-respawn marker first, which also makes the
+  OpenCode plug-in inert without stopping OpenCode. It then clean-stops the
+  daemon, stops the dashboard server, force-stops any leftover Node process whose
+  command line still runs our daemon or server script, and verifies that nothing
+  is left. Other Node processes and OpenCode itself are never touched.
 - **3 Restart all** = stop all, then start all.
 - **4 Restart RPC only** restarts just the daemon.
 - **6 Open dashboard** ensures the server is up, then opens the browser.
@@ -113,7 +114,7 @@ Direct arguments skip the menu. All launchers accept:
 
 ```bash
 run.cmd start-all          # daemon + dashboard server, no browser
-run.cmd stop-all           # daemon + server + leftover sweep
+run.cmd stop-all           # plug-in disabled, daemon + server stopped, leftover sweep
 run.cmd restart-all
 run.cmd restart-rpc        # daemon only
 run.cmd start              # daemon only
