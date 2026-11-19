@@ -205,6 +205,13 @@ Switching the source clean-stops the current daemon so the newly loaded plugin
 copy spawns its own. **Restart OpenCode after switching** so it reloads the
 config; the existing OpenCode process keeps running until then.
 
+Only **one** registration should exist. Both copies declare the same plugin ID
+(`clawstly-oc-rpc`), so two entries - even two entries in different config files
+- make OpenCode show `clawstly-oc-rpc failed, local` in `/plugins`. Choosing a
+source removes every Clawstly entry from all writable configs and writes exactly
+one to the active config. `source status` and `doctor` both flag duplicate or
+stale object-format registrations if they reappear.
+
 ## Commands
 
 ```bash
