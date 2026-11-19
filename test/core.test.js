@@ -9,7 +9,7 @@ import { pickActiveSession, resolveLargeImageKey, throttleDecision } from '../sr
 import { dayKeyAt, weekKey, cleanProjectName, emptyAggregate } from '../src/scanner.js';
 import { validateConfig } from '../src/server/settings.js';
 import {
-  isOurPluginEntry, readPluginsArray, replacePluginsArray, sourceStatus,
+  isOurPluginEntry, pluginRegistrationIssues, readPluginsArray, replacePluginsArray, sourceStatus,
 } from '../src/plugin-source.js';
 import { classifyCommand } from '../src/process-control.js';
 import {
@@ -145,6 +145,32 @@ export async function run({ test, assert }) {
     assert(status.configs.some((cfg) => cfg.group === 'global'));
     assert(typeof status.activeTarget === 'string');
     assert((status.presets.C || status.presets.L).endsWith('plugin'));
+  });
+
+  test('plugin registration issues detect duplicates and stale mappings', () => {
+    const entry = 'D:\\mirror\\clawstly_oc_rpc\\plugin';
+    const clean = pluginRegistrationIssues({
+      configs: [{ path: '/cfg/opencode.jsonc', exists: true, system: false, ours: [entry], raw: '' }],
+    });
+    assert.equal(clean.length, 0);
+    const duplicated = pluginRegistrationIssues({
+      configs: [{ path: '/cfg/opencode.jsonc', exists: true, system: false, ours: [entry, entry], raw: '' }],
+    });
+    assert(duplicated.some((issue) => issue.includes('2 clawstly entries')));
+    const split = pluginRegistrationIssues({
+      configs: [
+        { path: '/a/opencode.jsonc', exists: true, system: false, ours: [entry], raw: '' },
+        { path: '/b/opencode.jsonc', exists: true, system: false, ours: [entry], raw: '' },
+      ],
+    });
+    assert(split.some((issue) => issue.includes('split across 2 configs')));
+    const stale = pluginRegistrationIssues({
+      configs: [{
+        path: '/cfg/opencode.jsonc', exists: true, system: false, ours: [],
+        raw: '{"plugins":{"clawstly-oc-rpc":"C:\\work\\clawstly_oc_rpc\\plugin"}}',
+      }],
+    });
+    assert(stale.some((issue) => issue.includes('stale object-format')));
   });
 
   test('process classifier only matches our daemon and dashboard', () => {
