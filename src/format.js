@@ -195,12 +195,54 @@ function prettyFilePath(p) {
   return parts.slice(-3).join('/');
 }
 
+// fileEdits entries may come from older state files as plain counts. Accept
+// both shapes so an existing session doesn't lose its hotspot after an update.
+function sessionEditEntry(value) {
+  if (typeof value === 'number') return { count: value || 0, lastTs: 0 };
+  if (!value || typeof value !== 'object') return { count: 0, lastTs: 0 };
+  return { count: Number(value.count) || 0, lastTs: Number(value.lastTs) || 0 };
+}
+
+function sessionAgeLabel(lastTs) {
+  if (!lastTs) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const edited = new Date(lastTs);
+  edited.setHours(0, 0, 0, 0);
+  const days = Math.max(0, Math.round((today.getTime() - edited.getTime()) / 86_400_000));
+  if (days === 0) return 'edited today';
+  if (days === 1) return 'edited yesterday';
+  return `${days}d since last edit`;
+}
+
 export function buildVars(state, config, aggregate) {
   const sessionReal = (state.tokens?.input || 0) + (state.tokens?.output || 0);
   const sessionCacheRead = state.tokens?.cacheRead || 0;
   const sessionCacheWrite = state.tokens?.cacheWrite || 0;
   // {tokens} / {tokensFmt} now means the grand total (in + out + cache).
   const sessionTokens = sessionReal + sessionCacheRead + sessionCacheWrite;
+  // Current-session breakdown for the idle rotation. `state.tokens.input` is
+  // the fresh (non-cached) input written by the plugin, so sessionReal is the
+  // same "fresh tokens" figure used by the all-time frame.
+  const sessionFreshTokens = sessionReal;
+  const sessionCacheTokens = sessionCacheRead + sessionCacheWrite;
+  const sessionCachePct = sessionTokens > 0
+    ? Math.round((sessionCacheTokens / sessionTokens) * 100)
+    : 0;
+  const sessionLinesAdded = Number(state.linesAdded) || 0;
+  const sessionLinesRemoved = Number(state.linesRemoved) || 0;
+  const sessionLinesNet = sessionLinesAdded - sessionLinesRemoved;
+  const sessionEdits = Object.entries(state.fileEdits || {})
+    .map(([path, value]) => ({ path, ...sessionEditEntry(value) }))
+    .sort((a, b) => b.count - a.count || b.lastTs - a.lastTs);
+  const sessionTopEdit = sessionEdits[0] || null;
+  const sessionTopFile = sessionTopEdit
+    ? basename(String(sessionTopEdit.path).replace(/\\/g, '/'))
+    : '';
+  const sessionTopLanguage = sessionTopEdit
+    ? (languageOf(String(sessionTopEdit.path).replace(/\\/g, '/')) || '')
+    : '';
+  const sessionChurn = sessionLinesAdded !== 0 || sessionLinesRemoved !== 0 ? 1 : 0;
   // Cost is always estimated from the REAL model, never the privacy display
   // label — a fake display label should not change the arithmetic.
   const sessionCost = costFor({
@@ -558,6 +600,27 @@ export function buildVars(state, config, aggregate) {
     // Literal single space — handy for blanking a line without `requires`.
     empty: ' ',
 
+    // ── Current-session presence stats (idle rotation) ───────────
+    // These deliberately ignore `aggregate`; they describe only the session
+    // the daemon has selected for the card.
+    sessionFreshTokens,
+    sessionFreshTokensFmt: fmtNum(sessionFreshTokens),
+    sessionCacheTokens,
+    sessionCachePct,
+    sessionCachePctLabel: sessionTokens > 0 ? `${sessionCachePct}% from cache` : '',
+    sessionLinesAdded,
+    sessionLinesAddedFmt: fmtNum(sessionLinesAdded),
+    sessionLinesRemoved,
+    sessionLinesRemovedFmt: fmtNum(sessionLinesRemoved),
+    sessionLinesNet,
+    sessionLinesNetFmt: fmtLinesNet(sessionLinesNet),
+    sessionChurn,
+    sessionTopFile,
+    sessionTopEditedCount: sessionTopEdit?.count || 0,
+    sessionTopEditedCountLabel: sessionTopEdit ? plural(sessionTopEdit.count, 'edit') : '0 edits',
+    sessionTopEditedAgeLabel: sessionTopEdit ? sessionAgeLabel(sessionTopEdit.lastTs) : '',
+    sessionTopLanguage,
+
     // Pluralized session labels. tokensLabel is empty when zero so the
     // `· {tokensLabel}` suffix in custom templates collapses away.
     tokensLabel: sessionTokens > 0 ? `${fmtNum(sessionTokens)} tokens` : '',
@@ -867,6 +930,9 @@ function staleWipe(state) {
     filesOpened: [],
     filesEdited: [],
     filesRead: [],
+    fileEdits: {},
+    linesAdded: 0,
+    linesRemoved: 0,
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   };
 }
@@ -894,6 +960,9 @@ function borrowLiveSession(state, liveSessions, now) {
     filesOpened: [],
     filesEdited: [],
     filesRead: [],
+    fileEdits: {},
+    linesAdded: 0,
+    linesRemoved: 0,
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   };
 }
