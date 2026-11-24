@@ -11,6 +11,8 @@ import { resetState, updateState, readState, removeState, pushUnique, shortFile 
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
 import { recordEvent } from '../src/scanner.js';
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
+import { filePathFromTool, lineDeltaFromTool, normalizeUsage, parseToolInput } from '../src/session-stats.js';
+// @ts-ignore - core modules are plain JS, shipped without .d.ts files
 import { spawnDaemonDetached, daemonAlive, isStopped } from '../src/ensure-daemon.js';
 // @ts-ignore - core modules are plain JS, shipped without .d.ts files
 import { humanModel } from '../src/format.js';
@@ -35,6 +37,7 @@ interface ToolSignal {
   command: string | null;
   callId: string | null;
   failed: boolean;
+  input: any;
 }
 
 const G: any = globalThis as any;
@@ -200,6 +203,8 @@ function emit(kind: EventKind, fields: Bag = {}): void {
         cacheWrite: number(source.cacheWrite) ?? 0,
       },
       cost: number(fields.cost) ?? 0,
+      linesAdded: Math.max(0, number(fields.linesAdded) || 0),
+      linesRemoved: Math.max(0, number(fields.linesRemoved) || 0),
       ts,
       project: text(fields.project) ?? projectOf(cwd),
     });
@@ -303,19 +308,23 @@ function toolSignal(payload: any): ToolSignal {
   const toolObj = obj(rawTool);
   const toolName = text(first(toolObj.name, toolObj.id, rawTool)) ?? 'tool';
 
-  const input = first(o.input, o.args, o.arguments, o.parameters, o.toolInput, p.input, p.args, p.arguments, p.parameters, o.tool?.input, p.tool?.input, toolObj.input);
+  const rawInput = first(o.input, o.args, o.arguments, o.parameters, o.toolInput, p.input, p.args, p.arguments, p.parameters, o.tool?.input, p.tool?.input, toolObj.input);
+  const input = parseToolInput(rawInput);
   const io = obj(input);
-  const argsText = Array.isArray(input)
-    ? input.map((part: any) => text(part) ?? String(part)).join(' ')
-    : text(input);
-  const filePath = text(first(io.file_path, io.filePath, io.path, io.notebook_path, o.filePath, o.file, p.filePath, p.file));
+  const argsText = Array.isArray(rawInput)
+    ? rawInput.map((part: any) => text(part) ?? String(part)).join(' ')
+    : text(rawInput);
+  const filePath = text(first(
+    io.file_path, io.filePath, io.path, io.notebook_path,
+    o.filePath, o.file, p.filePath, p.file,
+  )) ?? filePathFromTool(toolName, input);
   const command = text(first(io.command, io.cmd, argsText, o.command, p.command));
   const callId = text(first(o.callID, o.callId, o.toolCallID, o.toolCallId, o.id, p.callID, p.callId, p.id, o.call?.id));
   const failed = o.error != null || o.isError === true || o.ok === false || o.success === false ||
     o.status === 'error' || obj(o.result).isError === true ||
     p.error != null || p.isError === true || p.ok === false || p.success === false;
 
-  return { toolName, filePath, command, callId, failed };
+  return { toolName, filePath, command, callId, failed, input };
 }
 
 function shellSignal(payload: any): ToolSignal {
@@ -336,6 +345,7 @@ function shellSignal(payload: any): ToolSignal {
     command: command || null,
     callId: text(first(o.callID, o.callId, p.callID, p.callId)) ?? null,
     failed: o.error != null || p.error != null || o.ok === false || p.ok === false,
+    input: null,
   };
 }
 
@@ -405,31 +415,8 @@ function markShipped(state: Bag, kind: string, command: string | null): void {
   state.justShippedSubject = (kind === 'commit' || kind === 'push') ? commitSubject(command) : null;
 }
 
-function usageFrom(payload: any): { tokens: Bag | null; cost: number | null } {
-  const o = obj(payload);
-  const p = obj(o.properties);
-  const candidates = [
-    o.usage, o.tokens, o.message?.tokens, o.message?.usage,
-    p.usage, p.tokens, p.message?.tokens, p.message?.usage,
-    obj(o.delta).tokens, obj(p.delta).tokens,
-  ];
-  for (const candidate of candidates) {
-    const u = obj(candidate);
-    if (!Object.keys(u).length) continue;
-    const cache = obj(first(u.cache, u.cached, u.cacheTokens));
-    const input = number(first(u.input, u.inputTokens, u.promptTokens, u.input_tokens, u.prompt_tokens));
-    const output = number(first(u.output, u.outputTokens, u.completionTokens, u.output_tokens, u.completion_tokens));
-    const cacheRead = number(first(u.cacheRead, u.cache_read, u.cachedRead, u.readCacheTokens, cache.read, cache.input));
-    const cacheWrite = number(first(u.cacheWrite, u.cache_write, u.cachedWrite, u.writeCacheTokens, cache.write, cache.output));
-    if (input == null && output == null && cacheRead == null && cacheWrite == null) continue;
-    const cost = number(first(o.cost, p.cost, u.cost, o.message?.cost, p.message?.cost, o.totalCost, p.totalCost));
-    return {
-      tokens: { input: input ?? 0, output: output ?? 0, cacheRead: cacheRead ?? 0, cacheWrite: cacheWrite ?? 0 },
-      cost,
-    };
-  }
-  return { tokens: null, cost: number(first(o.cost, p.cost, o.message?.cost, p.message?.cost)) };
-}
+// Usage payload normalization lives in src/session-stats.js so it is shared
+// with the daemon/tests. Canonical OpenCode fields take precedence there.
 
 // ---- plugin definition ------------------------------------------------------
 
@@ -440,6 +427,10 @@ export default Plugin.define({
     const seenSessions = new Set<string>();
     const seenPromptIds = new Set<string>();
     const toolCache = new Map<string, { at: number; signal: ToolSignal }>();
+    // onToolAfter can arrive twice for one call (hook + session.tool event).
+    // Key by call ID when available, otherwise by payload signature within a
+    // short window, so a single edit never double-counts hotspot/churn.
+    const seenToolAfter = new Map<string, number>();
     const sessionInfoCache = new Map<string, { at: number; info: SessionInfo }>();
     const signalHandlers = new Map<string, () => void>();
     const registrations: Array<{ dispose?: () => void | Promise<void> }> = [];
@@ -453,6 +444,25 @@ export default Plugin.define({
         const oldest = seenSessions.values().next().value as string | undefined;
         if (oldest) seenSessions.delete(oldest);
       }
+    };
+
+    const claimToolAfter = (sessionId: string | null, signal: ToolSignal): boolean => {
+      const now = Date.now();
+      const key = signal.callId
+        ? `id:${sessionId ?? ''}:${signal.callId}`
+        : `sig:${sessionId ?? ''}:${signal.toolName}:${signal.filePath ?? ''}:${signal.command ?? ''}:${JSON.stringify(signal.input ?? null)}:${Math.floor(now / 2000)}`;
+      if (seenToolAfter.has(key)) return false;
+      seenToolAfter.set(key, now);
+      if (seenToolAfter.size > 1000) {
+        for (const [oldKey, at] of seenToolAfter) {
+          if (now - at > 5 * 60_000) seenToolAfter.delete(oldKey);
+        }
+        if (seenToolAfter.size > 1000) {
+          const oldest = seenToolAfter.keys().next().value as string | undefined;
+          if (oldest) seenToolAfter.delete(oldest);
+        }
+      }
+      return true;
     };
 
     // ---- startup (best effort, never throws) ----
@@ -565,6 +575,7 @@ export default Plugin.define({
         command: signal.command ?? hit.signal.command,
         callId: signal.callId,
         failed: signal.failed || hit.signal.failed,
+        input: signal.input ?? hit.signal.input ?? null,
       };
     }
 
@@ -689,12 +700,16 @@ export default Plugin.define({
       try {
         const signal = recallTool(toolSignal(payload));
         const sessionId = sessionIdFrom(payload);
+        // The hook and the session.tool.after event can both deliver the same
+        // completed call. Count it once.
+        if (!claimToolAfter(sessionId, signal)) return;
         rememberSeen(sessionId);
         const info = await sessionInfo(sessionId, payload);
         const cwd = info.cwd ?? FALLBACK_CWD;
         const model = info.display ?? humanModelSafe(info.modelId);
         const ts = Date.now();
-        const wroteFile = !!signal.filePath && WRITE_TOOL_RE.test(signal.toolName);
+        const wroteFile = !!signal.filePath && WRITE_TOOL_RE.test(signal.toolName) && !signal.failed;
+        const delta = wroteFile ? lineDeltaFromTool(signal.toolName, signal.input) : { added: 0, removed: 0 };
         const shipped = !signal.failed && SHELL_TOOL_RE.test(signal.toolName)
           ? classifyShipCommand(signal.command)
           : null;
@@ -709,12 +724,25 @@ export default Plugin.define({
             s.filesEdited = pushUniqueSafe(s.filesEdited, signal.filePath);
             s.filesOpened = pushUniqueSafe(s.filesOpened, signal.filePath);
             s.filesRead = pushUniqueSafe(s.filesRead, signal.filePath);
+            if (!s.fileEdits || typeof s.fileEdits !== 'object') s.fileEdits = {};
+            const previous = obj(s.fileEdits[signal.filePath]);
+            s.fileEdits[signal.filePath] = {
+              count: (Number(previous.count) || 0) + 1,
+              lastTs: ts,
+            };
+            s.linesAdded = (Number(s.linesAdded) || 0) + delta.added;
+            s.linesRemoved = (Number(s.linesRemoved) || 0) + delta.removed;
           }
           if (shipped) markShipped(s, shipped, signal.command);
           return s;
         });
         emit('tool', { sessionId, cwd, model, toolName: signal.toolName, command: signal.command, filePath: signal.filePath, ts });
-        if (wroteFile) emit('file', { sessionId, cwd, model, toolName: signal.toolName, filePath: signal.filePath, ts });
+        if (wroteFile) {
+          emit('file', {
+            sessionId, cwd, model, toolName: signal.toolName, filePath: signal.filePath, ts,
+            linesAdded: delta.added, linesRemoved: delta.removed,
+          });
+        }
         if (shipped) emit('shipped', { sessionId, cwd, model, command: signal.command, ts });
       } catch { /* hooks never throw */ }
     };
@@ -843,31 +871,46 @@ export default Plugin.define({
       try {
         const sessionId = sessionIdFrom(payload);
         rememberSeen(sessionId);
-        const { tokens, cost } = usageFrom(payload);
+        const { tokens, cost } = normalizeUsage(payload);
         if (!tokens && cost == null) return;
         const o = obj(payload);
         const p = obj(o.properties);
         const isDelta = o.delta === true || p.delta === true || o.accumulate === false;
+        let deltaTokens: Bag | null = null;
+        let deltaCost = 0;
         mutate(sessionId, (s) => {
           touch(s);
           const previous = obj(s.tokens);
           if (tokens) {
             const keys = ['input', 'output', 'cacheRead', 'cacheWrite'];
-            if (isDelta) {
-              const next: Bag = {};
-              for (const key of keys) next[key] = (Number(previous[key]) || 0) + (Number(tokens[key]) || 0);
-              s.tokens = next;
-            } else {
-              const next: Bag = {};
-              for (const key of keys) next[key] = number(tokens[key]) ?? Number(previous[key]) ?? 0;
-              s.tokens = next;
+            const next: Bag = {};
+            deltaTokens = {};
+            for (const key of keys) {
+              const raw = isDelta
+                ? (number(tokens[key]) || 0)
+                : (number(tokens[key]) ?? number(previous[key]) ?? 0);
+              next[key] = Math.max(0, raw);
+              const diff = next[key] - (number(previous[key]) || 0);
+              // A compacted/reset session can report a lower cumulative total;
+              // never emit a negative token delta into the global aggregate.
+              (deltaTokens as Bag)[key] = diff > 0 ? diff : (isDelta ? next[key] : 0);
             }
+            s.tokens = next;
           }
-          if (cost != null) s.cost = isDelta ? (Number(s.cost) || 0) + cost : cost;
+          if (cost != null) {
+            const previousCost = number(s.cost) || 0;
+            const nextCost = isDelta ? previousCost + cost : cost;
+            s.cost = Math.max(0, nextCost);
+            deltaCost = Math.max(0, s.cost - previousCost);
+          }
           return s;
         });
         const info = await sessionInfo(sessionId, payload);
-        emit('usage', { sessionId, cwd: info.cwd ?? FALLBACK_CWD, model: info.display ?? humanModelSafe(info.modelId), tokens, cost });
+        emit('usage', {
+          sessionId, cwd: info.cwd ?? FALLBACK_CWD,
+          model: info.display ?? humanModelSafe(info.modelId),
+          tokens: deltaTokens ?? tokens, cost: deltaCost,
+        });
       } catch { /* events never throw */ }
     };
 
