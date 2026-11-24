@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { APP_NAME, modelLabelFor, normalizeMetric } from '../src/branding.js';
 import { DEFAULT_CONFIG } from '../src/default-config.js';
-import { buildVars, humanModel } from '../src/format.js';
+import { applyIdle, buildVars, humanModel } from '../src/format.js';
 import { EVENTS, pluginSnippet } from '../src/install.js';
 import { pickActiveSession, resolveLargeImageKey, throttleDecision } from '../src/presence.js';
 import { dayKeyAt, weekKey, cleanProjectName, emptyAggregate } from '../src/scanner.js';
@@ -61,6 +61,80 @@ export async function run({ test, assert }) {
     const tokenVars = buildVars(state, { ...base, displayModel: '', displayMetric: 'tokens' }, {});
     assert.equal(tokenVars.modelPretty, 'Sonnet 4.5');
     assert.match(tokenVars.metricLabel, /tokens$/);
+  });
+
+  test('idle rotation stats come from the selected session, not the global aggregate', () => {
+    const now = Date.now();
+    const state = {
+      status: 'idle',
+      sessionStart: now - 600_000,
+      lastActivity: now - 30_000,
+      cwd: 'C:\\repo',
+      model: 'anthropic/claude-opus-4-5',
+      tokens: { input: 1_200, output: 300, cacheRead: 8_800, cacheWrite: 0 },
+      fileEdits: {
+        'C:\\repo\\src\\app.ts': { count: 3, lastTs: now },
+        'C:\\repo\\README.md': { count: 1, lastTs: now - 86_400_000 },
+      },
+      linesAdded: 12,
+      linesRemoved: 4,
+      // applyIdle wipes this array; the new hotspot must not depend on it.
+      filesEdited: [],
+    };
+    const aggregate = {
+      inputTokens: 4_000_000_000,
+      outputTokens: 300_000_000,
+      cacheReadTokens: 100_000_000_000,
+      linesAdded: 0,
+      topEditedFiles: [{ path: 'C:\\old\\run.sh', count: 50 }],
+      languages: { JavaScript: 160 },
+    };
+    const vars = buildVars(state, { appName: APP_NAME, statusAssets: {}, presence: {} }, aggregate);
+    assert.equal(vars.sessionTopFile, 'app.ts');
+    assert.equal(vars.sessionTopEditedCount, 3);
+    assert.equal(vars.sessionTopEditedCountLabel, '3 edits');
+    assert.equal(vars.sessionTopEditedAgeLabel, 'edited today');
+    assert.equal(vars.sessionTopLanguage, 'TypeScript');
+    assert.equal(vars.sessionFreshTokens, 1_500);
+    assert.equal(vars.sessionFreshTokensFmt, '1.5k');
+    assert.equal(vars.sessionCachePct, 85);
+    assert.equal(vars.sessionCachePctLabel, '85% from cache');
+    assert.equal(vars.sessionLinesAddedFmt, '12');
+    assert.equal(vars.sessionLinesNetFmt, '+8');
+    assert.equal(vars.sessionChurn, 1);
+  });
+
+  test('applyIdle preserves session stats but stale/borrowed states reset them', () => {
+    const now = Date.now();
+    const fileEdits = { 'C:\\repo\\src\\app.ts': { count: 2, lastTs: now } };
+    const base = {
+      status: 'working',
+      sessionStart: now - 600_000,
+      lastActivity: now - 300_000,
+      opencodeProcessAlive: true,
+      cwd: 'C:\\repo',
+      fileEdits,
+      linesAdded: 7,
+      linesRemoved: 2,
+      liveSessions: [],
+    };
+    const idle = applyIdle(base, { idleThresholdSec: 60, staleSessionMin: 5 });
+    assert.equal(idle.status, 'idle');
+    assert.deepEqual(idle.fileEdits, fileEdits);
+    assert.equal(idle.linesAdded, 7);
+
+    const stale = applyIdle({ ...base, opencodeProcessAlive: false, opencodeClosed: true }, {});
+    assert.equal(stale.status, 'stale');
+    assert.deepEqual(stale.fileEdits, {});
+    assert.equal(stale.linesAdded, 0);
+
+    const borrowed = applyIdle({
+      ...base,
+      lastActivity: now - 600_000,
+      liveSessions: [{ cwd: 'D:\\other', mtime: now }],
+    }, { staleSessionMin: 5 });
+    assert.equal(borrowed.status, 'working');
+    assert.deepEqual(borrowed.fileEdits, {});
   });
 
   test('plugin snippet uses the V2 plugins array', () => {
