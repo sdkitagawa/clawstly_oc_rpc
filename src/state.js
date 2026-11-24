@@ -52,6 +52,13 @@ export const DEFAULT_STATE = {
   filesOpened: [],
   filesEdited: [],
   filesRead: [],
+  // Current-session presence stats. fileEdits is keyed by absolute path with
+  // { count, lastTs }; linesAdded/linesRemoved come from parsed tool diffs.
+  // The daemon keeps these across the working → idle transition so the idle
+  // rotation can show this session's hotspot/churn instead of global totals.
+  fileEdits: {},
+  linesAdded: 0,
+  linesRemoved: 0,
   tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   toolBreakdown: {},
   // Set when OpenCode reports that a session has ended or the plugin is
