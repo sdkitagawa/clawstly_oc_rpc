@@ -129,25 +129,6 @@ function resolvePricingKey(modelId) {
   return best.key;
 }
 
-// The model's own identity as a `tier-major[-minor]` key — what stats are
-// bucketed and labelled by. Unlike pricingKeyFor this never folds a model into
-// a neighbour: a release newer than the table (fable-5-3) is priced like
-// fable-5-2 but still shows up as "Fable 5.3". Ids with no readable version
-// fall back to the pricing key. Any key this returns is itself a valid input
-// to pricingKeyFor/ratesFor.
-const modelKeyCache = new Map();
-export function modelKeyFor(modelId) {
-  if (typeof modelId !== 'string') return pricingKeyFor(modelId);
-  let k = modelKeyCache.get(modelId);
-  if (k === undefined) {
-    const { tier, major, minor } = parseModel(modelId);
-    k = tier && major !== null ? `${tier}-${major}${minor ? `-${minor}` : ''}` : pricingKeyFor(modelId);
-    if (modelKeyCache.size >= 256) modelKeyCache.clear();
-    modelKeyCache.set(modelId, k);
-  }
-  return k;
-}
-
 export function ratesFor(modelId) {
   return PRICING[pricingKeyFor(modelId)] || DEFAULT;
 }
