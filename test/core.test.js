@@ -63,6 +63,26 @@ export async function run({ test, assert }) {
     assert.match(tokenVars.metricLabel, /tokens$/);
   });
 
+  test('model split vars come from model cost shares', () => {
+    const state = {
+      status: 'idle',
+      model: 'anthropic/claude-opus-4-5',
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      sessionStart: Date.now(),
+    };
+    const config = { appName: APP_NAME, statusAssets: {}, presence: {} };
+    const aggregate = {
+      modelSplit: [
+        { model: 'anthropic/claude-opus-4-5', count: 4, costPct: 0.6 },
+        { model: 'anthropic/claude-sonnet-4-5', count: 2, costPct: 0.4 },
+      ],
+    };
+    const vars = buildVars(state, config, aggregate);
+    assert.equal(vars.topModelCostPct, 60);
+    assert.match(vars.modelSplitLabel, /60%/);
+    assert.match(vars.topModelShareLabel, /60% of spend/);
+  });
+
   test('idle rotation stats come from the selected session, not the global aggregate', () => {
     const now = Date.now();
     const state = {
