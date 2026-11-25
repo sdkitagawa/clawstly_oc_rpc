@@ -6,8 +6,8 @@
 // those events into aggregate.json and exposes the same read API the daemon,
 // CLI and local dashboard expect.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { basename, dirname, extname } from 'node:path';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { basename } from 'node:path';
 import {
   AGGREGATE_PATH,
   DATA_DIR,
@@ -82,12 +82,6 @@ export function emptyAggregate() {
     sessions: 0,
     subagentRuns: 0,
     subagentActiveMs: 0,
-    sessionLengths: {
-      count: 0,
-      totalMs: 0,
-      longestMs: 0,
-      buckets: { lt15m: 0, m15to30: 0, m30to60: 0, h1to2: 0, h2to4: 0, gt4h: 0 },
-    },
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
@@ -133,7 +127,6 @@ export function emptyAggregate() {
     generatedAt: Date.now(),
     _v: CACHE_VERSION,
     _sessionIds: {},
-    _finalizedSessions: {},
     _lastEventAt: null,
   };
 }
@@ -253,14 +246,21 @@ function derive(agg) {
   agg.linesNet = (agg.linesAdded || 0) - (agg.linesRemoved || 0);
   agg.uniqueFiles = Math.max(agg.uniqueFiles || 0, Object.keys(agg.fileEdits || {}).length);
 
-  const modelSplit = Object.entries(agg.modelsUsed || {}).sort((a, b) => b[1] - a[1]).slice(0, 8)
-    .map(([model, count]) => ({ model, count }));
+  const modelCosts = agg.costByModel || {};
+  const costOf = (model) => Math.max(0, Number(modelCosts[model]) || 0);
+  const totalModelCost = Object.values(modelCosts)
+    .reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
+    || Math.max(0, Number(agg.estimatedCost) || 0);
+  const modelSplit = Object.entries(agg.modelsUsed || {})
+    .sort((a, b) => (costOf(b[0]) - costOf(a[0])) || (b[1] - a[1]))
+    .slice(0, 8)
+    .map(([model, count]) => ({
+      model,
+      count,
+      costPct: totalModelCost > 0 ? Math.min(1, costOf(model) / totalModelCost) : 0,
+    }));
   agg.modelSplit = modelSplit;
 
-  const sl = agg.sessionLengths;
-  if (sl.count > 0) {
-    sl.avgMs = Math.round(sl.totalMs / sl.count);
-  }
   agg.generatedAt = Date.now();
   return agg;
 }
@@ -386,26 +386,6 @@ export function recordEvent(payload = {}) {
 
   derive(agg);
   writeAggregate(agg);
-  return agg;
-}
-
-export function finalizeSession(state = {}) {
-  const agg = readAggregate() || emptyAggregate();
-  const id = state.sessionId;
-  if (id && !agg._finalizedSessions[id]) {
-    agg._finalizedSessions[id] = Date.now();
-    const duration = Math.max(0, Math.min(Date.now() - (state.sessionStart || Date.now()), ACTIVE_GAP_CAP_MS * 12));
-    const sl = agg.sessionLengths;
-    sl.count += 1;
-    sl.totalMs += duration;
-    sl.longestMs = Math.max(sl.longestMs || 0, duration);
-    const mins = duration / 60_000;
-    const bucket = mins < 15 ? 'lt15m' : mins < 30 ? 'm15to30' : mins < 60 ? 'm30to60'
-      : mins < 120 ? 'h1to2' : mins < 240 ? 'h2to4' : 'gt4h';
-    sl.buckets[bucket] = (sl.buckets[bucket] || 0) + 1;
-    derive(agg);
-    writeAggregate(agg);
-  }
   return agg;
 }
 
