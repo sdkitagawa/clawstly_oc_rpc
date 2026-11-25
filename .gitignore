@@ -30,7 +30,8 @@ desktop.ini
 .env.local
 config.local.json
 
-# Local audit scratchpads (findings, not part of the repo)
+# Local audit and backup scratchpads (not part of the repo)
+/backup/
 NOTES.md
 docs/AUDIT-*.md
 
