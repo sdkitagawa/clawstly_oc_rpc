@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 
 // require()d, not imported — on the hook hot path; see hook.js.
 const require = createRequire(import.meta.url);
-const { renameSync, writeFileSync, mkdirSync, existsSync, copyFileSync, unlinkSync } = require('node:fs');
+const { renameSync, writeFileSync, mkdirSync, unlinkSync } = require('node:fs');
 const { dirname } = require('node:path');
 
 const RETRY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
@@ -66,24 +66,3 @@ export function writeFileAtomic(path, data) {
   }
 }
 
-// One-time move of a file from an old location to its new home: does nothing
-// when `dest` already exists or there's nothing at `legacy`. rename() first;
-// tmpdir is often a different filesystem (tmpfs), so EXDEV falls back to
-// copy + unlink. Returns true when it adopted the legacy file. Never throws.
-// `rename` is injectable so the EXDEV fallback is testable.
-export function adoptLegacyFile(dest, legacy, { rename = renameSync } = {}) {
-  try {
-    if (!legacy || existsSync(dest) || !existsSync(legacy)) return false;
-    mkdirSync(dirname(dest), { recursive: true });
-    try {
-      rename(legacy, dest);
-    } catch (e) {
-      if (e.code !== 'EXDEV') throw e;
-      copyFileSync(legacy, dest);
-      try { unlinkSync(legacy); } catch { /* copied; a stale legacy file is harmless */ }
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
