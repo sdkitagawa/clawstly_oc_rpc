@@ -15,9 +15,7 @@ import {
   CONFIG_PATH,
   OPENCODE_CONFIG_DIR,
   PLUGIN_DIR,
-  PLUGIN_SCRIPT,
   ROOT,
-  USER_CONFIG_DIR,
   VERSION_STAMP,
 } from './paths.js';
 import { writeFileAtomic } from './atomic-rename.js';
@@ -55,16 +53,6 @@ export const EVENTS = [
   'filesystem.changed',
   'location.shutdown',
 ];
-
-const SEED_CONFIG = {
-  clientId: PLACEHOLDER_CLIENT_ID,
-  appName: APP_NAME,
-  displayModel: DEFAULT_DISPLAY_MODEL,
-  displayMetric: 'cost',
-  community: { enabled: false },
-  usage: { enabled: false },
-  profile: { enabled: false },
-};
 
 // Doctor/help speak about "plugins"; this keeps the shared wording in one place.
 export function hookWord() {
@@ -235,16 +223,6 @@ export function pluginStatus() {
     current: found.some((location) => location.current),
     pluginPath: resolve(PLUGIN_DIR),
   };
-}
-
-// Flexible so doctor can pass an entry, a config object, or nothing at all.
-// With no argument it answers "is our plugin registered in any OpenCode config?"
-export function isOurHook(target) {
-  if (target === undefined || target === null) return pluginStatus().found;
-  if (typeof target !== 'object') return false;
-  if (Array.isArray(target)) return target.some(isClawstlyPluginsValue);
-  if (pluginValue(target) || typeof target.package === 'string') return isClawstlyPluginsValue(target);
-  return pluginEntryIn(target).found;
 }
 
 export function pluginSnippet() {
@@ -450,17 +428,6 @@ export function selfHealOnUpdate({ silent = true } = {}) {
     try { writeFileAtomic(VERSION_STAMP, `${VERSION}\n`); } catch { /* best-effort */ }
   }
   return { changed, from, rewired, autostart };
-}
-
-// Diagnostics-friendly summary used by doctor.
-export function pluginInfo() {
-  const status = pluginStatus();
-  return {
-    ...status,
-    pluginDir: resolve(PLUGIN_DIR),
-    pluginScript: resolve(PLUGIN_SCRIPT),
-    configDir: USER_CONFIG_DIR,
-  };
 }
 
 // Backwards-compatible named export: some callers still look for `install`.
