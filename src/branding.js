@@ -4,7 +4,6 @@
 // changes what OpenCode actually does — it only changes the Discord card text.
 
 export const APP_NAME = 'Clawstly';
-export const PRODUCT_NAME = 'Clawstly OpenCode RPC';
 export const DEFAULT_DISPLAY_MODEL = 'Claude Opus';
 export const DEFAULT_DISPLAY_METRIC = 'cost';
 
