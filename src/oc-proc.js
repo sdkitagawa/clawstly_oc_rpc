@@ -119,7 +119,3 @@ export function detectOpenCodeProcess() {
   }
 }
 
-// Test helper — forces the next call to query the OS again.
-export function clearOpenCodeProcessCache() {
-  cached = null;
-}
