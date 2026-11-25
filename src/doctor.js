@@ -118,7 +118,6 @@ function checkPlugin() {
     return;
   }
   if (status.found) {
-    const stale = status.locations.find((location) => location.found && !location.current);
     check(`${hookWord()} registered`, 'warn', `found but not pointing at ${shortPath(PLUGIN_DIR)}`,
       'run `clawstly-oc-rpc setup` to point it at the local plugin directory');
     return;
