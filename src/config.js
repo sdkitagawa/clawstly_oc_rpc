@@ -24,14 +24,6 @@ import { DEFAULT_CONFIG } from './default-config.js';
 // require()d, not imported — on the hook hot path; see hook.js.
 const { readFileSync, existsSync } = createRequire(import.meta.url)('node:fs');
 
-// "Has the user run setup?" — a separate signal from `loadConfig` because
-// loadConfig now always returns merged defaults (the daemon needs them
-// even if the file isn't there yet). Callers that want to distinguish
-// "never been set up" from "everything default" check this instead.
-export function hasUserConfig(path = CONFIG_PATH) {
-  return existsSync(path);
-}
-
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
