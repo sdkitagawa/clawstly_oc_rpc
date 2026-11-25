@@ -1,26 +1,11 @@
 // Usage display helpers.
 //
-// This fork intentionally does NOT poll Anthropic usage endpoints or read any
-// provider credentials. The service is disabled by default and no network/token
-// access exists here. The exported no-ops keep template/dashboard callers safe.
-
-export const USAGE_STALE_MS = 30 * 60 * 1000;
+// This fork intentionally does NOT poll provider usage endpoints or read any
+// provider credentials. The cache reader stays a no-op so daemon template vars
+// remain empty; the reset-time formatters stay live for the template variables
+// that consume them.
 
 export function readUsageCache() {
-  return null;
-}
-
-export async function pollUsage() {
-  return { ok: false, reason: 'disabled' };
-}
-
-export function fetchUsage() {
-  return Promise.resolve({ ok: false, reason: 'disabled' });
-}
-
-export function writeUsageCache() {}
-
-export function normalizeUsage() {
   return null;
 }
 
