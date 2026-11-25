@@ -2,23 +2,23 @@
 // (single-instance guard), and the OpenCode V2 plugin. Kept dependency-light so
 // plugin setup can import the spawn recipe without pulling in the UI stack.
 //
-// The daemon comes up whenever an OpenCode session starts (ensureDaemonRunning,
-// called by the plugin), and claimSingleInstance guarantees that no matter how
-// many launchers fire at once — a manual `start` or several plugin setups from
-// concurrent sessions — exactly one daemon survives.
+// The daemon comes up whenever an OpenCode session starts (the plugin checks
+// daemonAlive() and calls spawnDaemonDetached() directly), and
+// claimSingleInstance guarantees that no matter how many launchers fire at once
+// — a manual `start` or several plugin setups from concurrent sessions — exactly
+// one daemon survives.
 
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import {
-  PID_PATH, STATE_DIR, DAEMON_SCRIPT, CANONICAL_EXE, IS_PACKAGED, DAEMON_INFO_PATH, STOPPED_PATH,
+  PID_PATH, DAEMON_SCRIPT, CANONICAL_EXE, IS_PACKAGED, DAEMON_INFO_PATH, STOPPED_PATH,
 } from './paths.js';
-import { renameSyncRetry, sleepSync } from './atomic-rename.js';
-import { VERSION } from './version.js';
+import { renameSyncRetry } from './atomic-rename.js';
 
-// require()d, not imported — on the hook hot path; see hook.js.
+// require()d, not imported — on the plugin setup hot path; see plugin/index.ts.
 const require = createRequire(import.meta.url);
 const {
-  openSync, closeSync, writeFileSync, readFileSync, unlinkSync, existsSync, statSync, mkdirSync,
+  openSync, closeSync, writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync,
 } = require('node:fs');
 
 // The daemon rewrites its heartbeat (DAEMON_INFO_PATH.beatAt) this often (its
@@ -31,13 +31,6 @@ const {
 // spawn that the daemons' own pid-file check reaps within a watchdog tick.
 export const BEAT_EVERY_MS = 30_000;
 export const BEAT_STALE_MS = 5 * 60_000;
-
-// mtime of this marker = last time any launcher attempted a spawn. A short
-// cooldown stops concurrent plugin setup hooks (several sessions opening at
-// once) and any startup crash-loop from spawning a swarm of throwaway daemons —
-// the single-instance claim would reap them, but not spawning them is cheaper.
-const SPAWN_MARKER = join(STATE_DIR, 'daemon-spawn.ts');
-const SPAWN_COOLDOWN_MS = 15_000;
 
 // True if `pid` names a live process. process.kill(pid,0) sends no signal — it
 // just probes: ESRCH → gone, EPERM → exists but owned by someone else (still
@@ -165,80 +158,6 @@ export function spawnDaemonDetached() {
   } catch {
     return null;
   }
-}
-
-// Pure decision for the hook's self-heal: should THIS plugin setup spawn a
-// daemon? Separated from the side effects so it's unit-testable.
-export function shouldSpawnDaemon({ autostart, stopped = false, daemonPid, lastAttemptMs, now, cooldownMs }) {
-  if (autostart === false) return false;                                  // explicit opt-out
-  if (stopped) return false;                                              // `clawstly-oc-rpc stop` sticks
-  if (daemonPid) return false;                                            // already running
-  if (lastAttemptMs && now - lastAttemptMs < cooldownMs) return false;    // within the cooldown
-  return true;
-}
-
-// Self-heal entry point, called by the plugin setup hook. Best-effort and fast:
-// if no daemon is running (reboot, crash, OS sleep, closed terminal — or simply
-// a platform with no login-autostart entry), bring one up. Stamps the cooldown
-// marker BEFORE spawning so sibling plugin setup hooks racing this one skip
-// instead of each launching a throwaway. Returns the spawned child, or null.
-export function ensureDaemonRunning({ autostart = true, now = Date.now(), cooldownMs = SPAWN_COOLDOWN_MS } = {}) {
-  let lastAttemptMs = 0;
-  try { if (existsSync(SPAWN_MARKER)) lastAttemptMs = statSync(SPAWN_MARKER).mtimeMs; } catch { /* unreadable — treat as never */ }
-  const stopped = isStopped();
-  let daemonPid = daemonAlive();
-  // An update swaps the files on disk but the running daemon keeps executing
-  // the old code — forever, since nothing restarted it (`npm i -g`, the
-  // desktop app's updater, a re-downloaded exe). The hook is the newer code, so
-  // it replaces a daemon that is older than itself (or too old to say).
-  if (daemonPid && autostart !== false && !stopped
-      && shouldReplaceDaemon({ info: readDaemonInfo(), pid: daemonPid, version: VERSION, lastAttemptMs, now })) {
-    stampSpawn(now);
-    if (!replaceDaemonSync(daemonPid)) return null;
-    daemonPid = 0;
-    lastAttemptMs = 0;
-  }
-  if (!shouldSpawnDaemon({ autostart, stopped, daemonPid, lastAttemptMs, now, cooldownMs })) return null;
-  stampSpawn(now);
-  return spawnDaemonDetached();
-}
-
-function stampSpawn(now) {
-  try { mkdirSync(STATE_DIR, { recursive: true }); } catch { /* exists / unwritable */ }
-  try { writeFileSync(SPAWN_MARKER, String(now)); } catch { /* best-effort cooldown */ }
-}
-
-// Pure: should a launcher at `version` replace the running daemon? Yes when the
-// daemon reports an older version, or reports nothing (pre-1.9 daemons never
-// wrote daemon.json). The no-info case is rate-limited to one attempt per
-// REPLACE_COOLDOWN_MS so an unwritable tmp dir can't restart it every session.
-const REPLACE_COOLDOWN_MS = 30 * 60_000;
-export function shouldReplaceDaemon({ info, pid, version, lastAttemptMs = 0, now = Date.now(), cooldownMs = REPLACE_COOLDOWN_MS }) {
-  if (info && info.pid === pid) return typeof info.version === 'string' && isNewerVersion(version, info.version);
-  return !(lastAttemptMs && now - lastAttemptMs < cooldownMs);
-}
-
-export function isNewerVersion(a, b) {
-  const p = (v) => (/^(\d+)\.(\d+)\.(\d+)/.exec(String(v || '')) || []).slice(1).map(Number);
-  const x = p(a), y = p(b);
-  if (x.length !== 3 || y.length !== 3) return false;
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
-  return false;
-}
-
-// Synchronous stop for the hook (it can't await): SIGTERM, wait ≤2s for the
-// process to go, hard-kill if it didn't. True once it's gone.
-function replaceDaemonSync(pid) {
-  const waitGone = (ms) => {
-    const deadline = Date.now() + ms;
-    while (Date.now() < deadline) { if (!isAlive(pid)) return true; sleepSync(50); }
-    return !isAlive(pid);
-  };
-  try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
-  let gone = waitGone(2000);
-  if (!gone) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } gone = waitGone(1000); }
-  if (gone) cleanupPidFile(pid);
-  return gone;
 }
 
 // Atomic single-instance claim, called once by the daemon at startup. Returns
