@@ -139,9 +139,6 @@ export const COMMANDS = [
     usage: '[command]', args: 'command' },
 ];
 
-// Internal entry points the dispatcher knows but nobody types.
-export const INTERNAL = ['hook', '__complete', '--version', '-V', '-v', '--help', '-h'];
-
 const BY_NAME = new Map();
 for (const cmd of COMMANDS) {
   BY_NAME.set(cmd.name, cmd);
@@ -161,10 +158,6 @@ export function findCommand(name) {
 
 export function visibleCommands() {
   return COMMANDS.filter((cmd) => cmd.group);
-}
-
-export function allNames() {
-  return [...BY_NAME.keys(), ...INTERNAL];
 }
 
 // Levenshtein over small strings, for "did you mean" hints.
