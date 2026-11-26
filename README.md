@@ -1,3 +1,24 @@
+<div align="center">
+
+<img src="assets/header.svg" width="820" alt="claude-rpc — Discord Rich Presence for Claude Code: live model, project, tokens, and lifetime stats, driven by the hooks Claude Code already fires. Install with: npx claude-rpc setup" />
+
+<br />
+
+<img src="assets/status/clawstly_oc_working.gif" width="104" alt="Clawstly Working" />
+<img src="assets/status/clawstly_oc_thinking.gif" width="104" alt="Clawstly Thinking" />
+<img src="assets/status/clawstly_oc_notification.gif" width="104" alt="Clawstly Notification" />
+<img src="assets/status/clawstly_oc_idle.gif" width="104" alt="Clawstly Idle" />
+
+<sub>Card's live states - <b>Working</b> · <b>Thinking</b> · <b>Notification</b> · <b>Idle</b></sub>
+
+Discord Rich Presence for [**OpenCode Clawstly**](https://github.com/sdkitagawa/clawstly_oc_buddy).
+
+</div>
+
+---
+
+<br />
+
 # Clawstly OC RPC
 
 Clawstly Discord Rich Presence for **OpenCode** into an OpenCode V2 plugin with a local daemon.
@@ -12,7 +33,6 @@ Clawstly Discord Rich Presence for **OpenCode** into an OpenCode V2 plugin with 
 ## Install
 
 ```bash
-npm install
 node bin/clawstly-oc-rpc.js setup
 ```
 
