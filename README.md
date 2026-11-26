@@ -1,7 +1,5 @@
 <div align="center">
-
-<img src="assets/header.svg" width="820" alt="claude-rpc — Discord Rich Presence for Claude Code: live model, project, tokens, and lifetime stats, driven by the hooks Claude Code already fires. Install with: npx claude-rpc setup" />
-
+  <img src="assets/header.svg" width="820" alt="Clawstly OC RPC - Discord Rich Presence for OpenCode Clawstly: live model, project, tokens, and lifetime stats, driven by the hooks" />
 <br />
 
 <img src="assets/status/clawstly_oc_working.gif" width="104" alt="Clawstly Working" />
@@ -12,7 +10,6 @@
 <sub>Card's live states - <b>Working</b> · <b>Thinking</b> · <b>Notification</b> · <b>Idle</b></sub>
 
 Discord Rich Presence for [**OpenCode Clawstly**](https://github.com/sdkitagawa/clawstly_oc_buddy).
-
 </div>
 
 ---
@@ -30,46 +27,11 @@ Clawstly Discord Rich Presence for **OpenCode** into an OpenCode V2 plugin with 
 - Discord desktop client running and signed in (Rich Presence uses local Discord IPC)
 - Your own Discord application Client ID
 
-## Install
+## Architecture
 
-```bash
-node bin/clawstly-oc-rpc.js setup
-```
-
-`setup` will:
-
-- create `config.json` from the shipped defaults if it does not exist
-- register this project's `plugin/` directory in your OpenCode V2 config
-- print the Discord Portal steps and current status
-
-To see the config snippet without writing anything:
-
-```bash
-node bin/clawstly-oc-rpc.js setup --print-plugin
-```
-
-OpenCode config locations checked by setup:
-
-- `~/.config/opencode/opencode.jsonc` (also on Windows)
-- `./opencode.jsonc`
-- `./.opencode/opencode.jsonc`
-
-The plugin registration looks like:
-
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": [
-    "C:/absolute/path/to/clawstly_oc_rpc/plugin"
-  ]
-}
-```
-
-OpenCode reloads config changes automatically; check with `opencode plugin list` if needed. Restart the daemon after changing `config.json`:
-
-```bash
-node bin/clawstly-oc-rpc.js restart
-```
+<div align="center">
+  <img src="assets/architecture.svg" width="760" alt="Architecture of Clawstly OC RPC: OpenCode V2 loads the registered plugin/index.ts, whose hooks and events write per-session state files in the OS temp directory and record aggregate events. The daemon reads those state files, renders presence using templates, privacy and pricing data, and sends SET_ACTIVITY frames over local Discord IPC to the desktop client. scanner.js rolls the state into aggregate.json; a loopback-only server on 127.0.0.1:47474 serves the dashboard and settings over REST and SSE, while launchers and the CLI control the daemon, server and plugin source." />
+</div>
 
 ## Easy launcher
 
@@ -158,6 +120,47 @@ it uses the POSIX script path and `curl`/`wget` / `xdg-open`, and only touches
 On macOS/Linux the source shortcuts are `L` (this install's own `plugin/`
 directory) and `M` (an optional mirror); `C`/`D` remain accepted aliases.
 Override the presets with `CLAWSTLY_PLUGIN_SOURCE` / `CLAWSTLY_PLUGIN_MIRROR`.
+
+## Install
+
+```bash
+node bin/clawstly-oc-rpc.js setup
+```
+
+`setup` will:
+
+- create `config.json` from the shipped defaults if it does not exist
+- register this project's `plugin/` directory in your OpenCode V2 config
+- print the Discord Portal steps and current status
+
+To see the config snippet without writing anything:
+
+```bash
+node bin/clawstly-oc-rpc.js setup --print-plugin
+```
+
+OpenCode config locations checked by setup:
+
+- `~/.config/opencode/opencode.jsonc` (also on Windows)
+- `./opencode.jsonc`
+- `./.opencode/opencode.jsonc`
+
+The plugin registration looks like:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "C:/absolute/path/to/clawstly_oc_rpc/plugin"
+  ]
+}
+```
+
+OpenCode reloads config changes automatically; check with `opencode plugin list` if needed. Restart the daemon after changing `config.json`:
+
+```bash
+node bin/clawstly-oc-rpc.js restart
+```
 
 ## Plugin registration / source selection
 
